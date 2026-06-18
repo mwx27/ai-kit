@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.5.0] — 2026-06-18
+
+### Added
+
+- **A public-safe copy of the inventory, made for you automatically.** The skill has always written one inventory file — a private working doc thick with evidence you'd never send outward: contribution percentages, file paths, commit counts, who-wrote-what, candid notes. Sharing your work with anything outward-facing (say, a recruiter-facing CV chatbot) meant redacting it by hand, every time, in a copy that quickly fell out of date. Now the skill also writes a redacted sibling to `content/data-inventories-public/` — same technical substance and significance tiers, same polished Polish/English bullets, but with the client metrics, paths, and teammate names stripped out (co-authored work reads "co-built", your majority work reads "primary author", no one else is named). It's rebuilt from the same data whenever the private one changes, so the two can't drift apart. Treat it as a draft to eyeball before sharing, not a guaranteed-clean file — automated redaction can miss a subtle leak. Skipped in `refinement` mode. (New `references/PUBLIC_INVENTORY.md`; `SKILL.md` Phases 7–8.)
+
 ## [0.4.0] — 2026-06-18
 
 ### Changed

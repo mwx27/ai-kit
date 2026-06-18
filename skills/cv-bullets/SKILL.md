@@ -326,6 +326,10 @@ write (skip entirely in `refinement` mode) — the per-phase population order an
 **two-axes rule** (authorship vs. selection) that keeps the table from collapsing into the
 chosen list live in **`references/INVENTORY_TEMPLATE.md`**.
 
+A **public-safe sibling** is derived from the same in-memory data (Phase 7, refreshed in
+Phase 8) and written to `content/data-inventories-public/` — a redacted, review-first draft
+for outward-facing use. Strip/keep rules, prose format, and path: **`references/PUBLIC_INVENTORY.md`**.
+
 ### Phase 7 — Write to CV (no preview gate)
 
 Once self-review is clean, write directly to `cv.pl.ts` and `cv.en.ts` — no approval gate
@@ -337,12 +341,17 @@ Once self-review is clean, write directly to `cv.pl.ts` and `cv.en.ts` — no ap
    (otherwise leave it untouched).
 4. **Leave changes unstaged — do NOT run `git add`, `git commit`, or any git mutation.**
    The user reviews unstaged diffs as their sanity check.
-5. Show what was written in chat: the two TS arrays; comparison verdicts (incl. proposals
+5. **Emit the public-safe inventory draft** (skip in `refinement` mode): derive a redacted
+   sibling of the inventory from the in-memory data and write it to
+   `content/data-inventories-public/`. Rules, format, and path: `references/PUBLIC_INVENTORY.md`.
+6. Show what was written in chat: the two TS arrays; comparison verdicts (incl. proposals
    not written, so the user can override); the techStack decision ("kept as-is" or "added
    X, removed Y"); any duplicate warnings; a brief rationale for cuts; acknowledged
    uncertainties; a pointer to the inventory file (⭐ items, cut items to swap in); a
    pointer to `git diff content/cv.pl.ts content/cv.en.ts`; and the git/PR metrics as a
-   bonus after the bullets.
+   bonus after the bullets. Also flag the public-safe draft and note it is a
+   **review-it-first draft** — the user should eyeball it before feeding it to any
+   outward-facing bot (redaction can miss a subtle leak).
 
 **Exception:** if the CV files are inaccessible (sandbox), fall back to preview-only —
 show the TS arrays in chat and tell the user to paste them in. Don't silently fail.
@@ -352,6 +361,8 @@ show the TS arrays in chat and tell the user to paste them in. Don't silently fa
 Iterate by editing the files in place:
 - Adjust/swap/tighten bullets; when the user picks an item from the inventory, look up its
   categorization, edit the CV, and update the inventory's ⭐ markers.
+- When iteration changes the bullets or tiers, **refresh the public-safe inventory file too**
+  (overwrite in place) so it stays in sync — see `references/PUBLIC_INVENTORY.md`.
 - Show only the changed bullets (deltas), not the full array unless asked. Remind once:
   "Run `git diff` to see all changes."
 - **Do NOT commit between iterations** — unstaged is the working state; the user commits
@@ -396,6 +407,8 @@ auto-loaded:
   PARTIAL framing (Phase 2.5).
 - `references/INVENTORY_TEMPLATE.md` — inventory file template, path convention, and
   techStack-revision / duplicate-warning formats.
+- `references/PUBLIC_INVENTORY.md` — redacted public-safe inventory: strip/keep rules, prose
+  format, path, and the review-first safety stamp (Phase 7 / Phase 8).
 - `references/DISCOVERY_COMPLETENESS.md` — the inventory-size sniff test + `Explore`
   feature-discovery subagent (Phase 3) and the category-mix check (Phase 6).
 - `scripts/analyze_git.py` — git/PR metrics (`--author` repeatable, identity rollup) and the
@@ -403,4 +416,4 @@ auto-loaded:
 
 ---
 
-**Current version: 0.4.0.** See `CHANGELOG.md` for version history.
+**Current version: 0.5.0.** See `CHANGELOG.md` for version history.
