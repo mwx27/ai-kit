@@ -1,6 +1,6 @@
 {
   "name": "cv-bullets",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Generate, refine, or analyze CV/resume bullets for software projects. Scans a project repo (and related sibling repos), runs git metrics, categorizes achievements as baseline vs senior, and composes bilingual (Polish/English) bullets that follow a strict style guide.",
   "author": {
     "name": "Maciej Wojda"

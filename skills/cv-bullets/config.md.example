@@ -20,7 +20,7 @@ Used in:
 - **Phase 0** — to locate and read the existing CV for the "new entry vs refinement"
   check and for style mirroring.
 - **Phase 1 / Phase 7** — to read and write `cv.pl.ts` / `cv.en.ts`.
-- **Phase 4.5** — to save the inventory markdown under `<cv_path>/content/data-inventories/`.
+- **Phases 4–8** — to save and update the inventory markdown under `<cv_path>/content/data-inventories/`.
 
 ### git_author_pattern
 

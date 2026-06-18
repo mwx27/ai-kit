@@ -3,10 +3,21 @@
 The skill persists the categorized inventory as a markdown file the user reviews
 offline, uses for interview prep, and compares against future iterations.
 
-**The inventory is a truth document, not a journey log.** Only include items that survive
-verification (Phase 2.5 authorship gate, Phase 4 categorization). Items rejected during the
-blame check are *not* documented here — no "considered but cut" or audit-trail section. The
-user must be able to trust every row as verifiably theirs.
+**The inventory is a truth document, not a journey log.** Two independent axes govern a row,
+and collapsing them into one is the classic failure:
+
+- **Authorship — what's yours.** Only items that pass the Phase 2.5 blame gate get a row.
+  Items the gate rejected are *not* logged here — no "considered but cut" or audit-trail
+  section. Every row must be verifiably yours.
+- **Selection — what shipped.** The ⭐ marks rows that became CV bullets. It is an *overlay*
+  on a row, never an entry condition. Gate-surviving SOLID/BASELINE items that weren't
+  chosen still get a row, just without a ⭐ — they are the swap-in pool for iteration.
+
+So the table is deliberately broader than the "Chosen for CV" section. **If every row carries
+a ⭐, the two axes have been collapsed** — the table now just duplicates "Chosen for CV" and
+the swap-in pool is gone. That is the signature of the bug; rebuild from the full Phase 4
+categorized list. Population order below is structured so this can't happen: rows exist
+before selection does.
 
 ## When & where
 
@@ -17,16 +28,24 @@ user must be able to trust every row as verifiably theirs.
   this project, append `-2`, `-3`, …
 - Create `data-inventories/` if it doesn't exist.
 - **Skip entirely in `refinement` mode** — there's no fresh inventory to save.
-- **Write after Phase 6.6** (composition + all reviews complete), then update in Phase 8
-  if the user iterates.
+- **Built incrementally**, not in one end-of-run write — see "Population order" below. The
+  table is materialized at the end of Phase 4 (before selection), enriched in later phases,
+  and its ⭐ markers updated in Phase 8 if the user iterates.
 
 ## Population order
 
-- "Repo metrics" — after Phase 2 (git data), augmented with PR data if `gh` available.
-- "Inventory table" categories — after Phase 4.
-- "Chosen for CV" + ⭐ markers — after Phase 5.
-- "TechStack revision" — after Phase 6.5.
-- "Duplicate warnings" — after Phase 6.6 Part B, only if duplicates exist (else omit).
+Built across phases, not in one write. The order matters: the rows are created *before*
+selection exists, so they cannot be filtered down to the chosen bullets.
+
+- **"Repo metrics"** — after Phase 2 (git data), augmented with PR data if `gh` available.
+- **"Inventory table" rows** — at the end of Phase 4: one row per gate-surviving categorized
+  item, sorted FLAGSHIP→BASELINE, **Status column empty** (⭐ doesn't exist yet — selection
+  is Phase 5). This is the truth snapshot, the moment that prevents the collapse above.
+- **⭐ markers + "Chosen for CV"** — at Phase 5: overlay a ⭐ onto each existing row that
+  became a bullet. **Never delete rows.** Non-chosen rows stay as the swap-in pool. Items
+  surfaced later (Phase 6 re-scan) are appended as new rows, gated and categorized like the rest.
+- **"TechStack revision"** — after Phase 6.5.
+- **"Duplicate warnings"** — after Phase 6.6 Part B, only if duplicates exist (else omit).
 
 ## Template
 
@@ -40,8 +59,9 @@ user must be able to trust every row as verifiably theirs.
 
 ## Inventory table
 
-{Single table sorted by category (FLAGSHIP first, then SENIOR, SOLID, BASELINE).
-Items chosen for the final CV are marked ⭐ in the Status column.}
+{Single table sorted by category (FLAGSHIP first, then SENIOR, SOLID, BASELINE). The ⭐ in
+the Status column marks rows chosen as CV bullets; rows that passed the gate but weren't
+chosen stay in the table with an empty Status — that's the expected mix, not every row ⭐.}
 
 | Status | Item | Source | Category | Evidence |
 |--------|------|--------|----------|----------|

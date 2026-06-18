@@ -236,6 +236,12 @@ Label each inventory item using `references/BASELINE_VS_SENIOR.md`: **BASELINE**
 signal), **FLAGSHIP** (the user's stated flagship claim from Q4). When unsure, ask: "Is
 this above what most devs in your stack do, or standard?"
 
+Then **write the inventory table to disk now, before any bullet is chosen** — one row per
+gate-surviving item, Status column empty. Building the rows here, while "chosen for CV"
+does not yet exist, is what stops the table later shrinking to just the picked bullets and
+losing the swap-in pool. Path and format: `references/INVENTORY_TEMPLATE.md` (skip in
+`refinement` mode).
+
 ### Phase 5 — Composition
 
 **Selection logic (how many):** all FLAGSHIP items are in (never cut); all SENIOR items
@@ -243,6 +249,9 @@ are in; SOLID items only if they add a distinct signal not already covered AND t
 room under the cap; BASELINE never. Cap at 5 — if FLAGSHIP+SENIOR already exceeds 5, keep
 the strongest 5 (ask the user if it's unclear which to cut). If only 3 strong items
 exist, ship 3. **Never pad with weak signals to hit a number.**
+
+After selecting, **overlay a ⭐ onto the matching rows of the inventory table written in
+Phase 4** — don't rebuild or prune it. Non-chosen rows stay; they are the swap-in pool.
 
 **Length:** 105-char ceiling, one optional extended slot up to 170 per section. Full
 rules — including the padding/length-as-target smells — live in **STYLE_GUIDE.md →
@@ -310,12 +319,12 @@ that resemble what you're about to write (same topic/signal, not string similari
 to the inventory ("Duplicate warnings" section) and to chat. The user decides whether to
 keep both, differentiate, or remove one. If none, omit the section.
 
-### Phase 4.5 / inventory file
+### Inventory file (populated across phases)
 
-Save the categorized inventory as markdown (skip in `refinement` mode). Path convention,
-the full template, column conventions, and the "TechStack revision" / "Duplicate
-warnings" formats are in **`references/INVENTORY_TEMPLATE.md`**. Write it after Phase 6.6
-(after composition and all reviews), then update its ⭐ markers if the user iterates.
+The categorized inventory is a markdown file built **incrementally**, not in one end-of-run
+write (skip entirely in `refinement` mode) — the per-phase population order and the
+**two-axes rule** (authorship vs. selection) that keeps the table from collapsing into the
+chosen list live in **`references/INVENTORY_TEMPLATE.md`**.
 
 ### Phase 7 — Write to CV (no preview gate)
 
@@ -394,4 +403,4 @@ auto-loaded:
 
 ---
 
-**Current version: 0.3.0.** See `CHANGELOG.md` for version history.
+**Current version: 0.4.0.** See `CHANGELOG.md` for version history.

@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.4.0] — 2026-06-18
+
+### Changed
+
+- **The inventory table is now built before the bullets are chosen, not after.** The table is meant to list *all* of your work that passed the authorship gate — with a ⭐ on the items that became CV bullets and the rest left as a pool you can swap in while iterating. Previously the skill assembled the whole inventory at the very end of the run, when only the chosen bullets were fresh in mind, so it sometimes recorded *only* the starred items and silently dropped the solid-but-not-chosen work — leaving nothing to swap in. The rows are now written right after categorization (when "chosen" doesn't exist yet) and the ⭐ is layered on during composition, so the swap-in pool can no longer go missing. The inventory file is filled in across phases instead of in one write at the end. (`SKILL.md` Phases 4–5 and inventory section; `references/INVENTORY_TEMPLATE.md` truth-document rule + population order.)
+
 ## [0.3.0] — 2026-06-03
 
 ### Added
