@@ -26,10 +26,11 @@ Some skills read a per-user config file so they don't ship anyone's personal pat
 1. Copy the example config into your Claude config directory:
 
    ```bash
-   cp ~/.claude/plugins/cv-bullets/config.md.example ~/.claude/skills/cv-bullets/config.md
+   mkdir -p ~/.claude/skills/cv-bullets
+   cp ~/.claude/plugins/cache/mwx27-ai-kit/cv-bullets/<version>/config.md.example ~/.claude/skills/cv-bullets/config.md
    ```
 
-   (Adjust the source path if your plugin installs elsewhere — the file is `config.md.example` inside the `cv-bullets` plugin.)
+   (Replace `<version>` with the installed version shown in `/plugin`.)
 
 2. Open `~/.claude/skills/cv-bullets/config.md` and fill in:
    - **`cv_path`** — path to your CV folder (the one containing `content/cv.pl.ts` / `content/cv.en.ts`)

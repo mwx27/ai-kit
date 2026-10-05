@@ -24,6 +24,9 @@ supplies two values used throughout this document:
 
 Reading and bootstrapping this file is **Step 0.0** of the workflow (below).
 
+Bundled scripts live in `${CLAUDE_SKILL_DIR}/scripts/`. Wherever a reference file writes
+`<skill_dir>`, substitute `${CLAUDE_SKILL_DIR}`.
+
 ## CV structure
 
 The CV lives at `<cv_path>` with two data files of **identical structure** (only the
@@ -87,7 +90,7 @@ fine; `analyze_git.py` is not).
 
 **Question 1 — Related repositories (the most important).** Many projects span multiple
 repos (mobile app + separate backend, webview embeds, landing/admin elsewhere). Run
-`~/.claude/skills/cv-bullets/scripts/scan_siblings.py` first, present its summary, then ask which repos to include
+`${CLAUDE_SKILL_DIR}/scripts/scan_siblings.py` first, present its summary, then ask which repos to include
 via a multi-select widget. **Full mechanics — scan command, summary format, the widget's
 Case A/B/C and additive-only rules — are in `references/DIALOG_GATE.md`; read it when you
 reach this question.**
@@ -159,13 +162,13 @@ With the user's answers in hand:
 
 ### Phase 2 — Repo analysis
 
-Run `~/.claude/skills/cv-bullets/scripts/analyze_git.py` (it analyzes the current
+Run `${CLAUDE_SKILL_DIR}/scripts/analyze_git.py` (it analyzes the current
 directory — no `--repo` flag; `cd` into a different repo to analyze it):
 
 ```bash
-python3 ~/.claude/skills/cv-bullets/scripts/analyze_git.py --author "<git_author_pattern>"                     # all-time, filtered to user
-python3 ~/.claude/skills/cv-bullets/scripts/analyze_git.py --author "<git_author_pattern>" --since 2025-11-01  # limit to project period
-python3 ~/.claude/skills/cv-bullets/scripts/analyze_git.py --author "<git_author_pattern>" --json              # for parsing
+python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_git.py --author "<git_author_pattern>"                     # all-time, filtered to user
+python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_git.py --author "<git_author_pattern>" --since 2025-11-01  # limit to project period
+python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_git.py --author "<git_author_pattern>" --json              # for parsing
 ```
 
 Substitute the configured `git_author_pattern`. `--author` is **repeatable** — pass one
@@ -201,7 +204,7 @@ projects joined mid-flight, this is how teammates' work silently ends up in your
 Run the gate over the candidate paths (same `--author` set as Phase 2):
 
 ```bash
-python3 ~/.claude/skills/cv-bullets/scripts/analyze_git.py --author "<p1>" --author "<p2>" --paths <path> <path> …
+python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_git.py --author "<p1>" --author "<p2>" --paths <path> <path> …
 ```
 
 Each path returns **OWN** (you created it, or blame ≥ 50% → bullet freely), **PARTIAL**
@@ -416,4 +419,4 @@ auto-loaded:
 
 ---
 
-**Current version: 0.5.0.** See `CHANGELOG.md` for version history.
+**Current version: 0.5.1.** See `CHANGELOG.md` for version history.

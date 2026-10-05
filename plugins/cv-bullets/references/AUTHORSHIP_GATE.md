@@ -23,7 +23,7 @@ and *undercounts your share* — the gate then rejects real work.
 Run the history analysis first and read the **Identity rollup** section:
 
 ```bash
-python3 ~/.claude/skills/cv-bullets/scripts/analyze_git.py --author "<pattern1>" --author "<pattern2>"
+python3 <skill_dir>/scripts/analyze_git.py --author "<pattern1>" --author "<pattern2>"
 ```
 
 Pass one `--author` per variant from `config.md`'s `git_author_pattern` (comma-separated
@@ -36,7 +36,7 @@ contributor that is actually you under a different email, add that variant as an
 For each file or folder an inventory item would cite:
 
 ```bash
-python3 ~/.claude/skills/cv-bullets/scripts/analyze_git.py \
+python3 <skill_dir>/scripts/analyze_git.py \
   --author "<pattern1>" --author "<pattern2>" \
   --paths src/ai/transport.ts src/webview/ app/_layout.tsx
 ```

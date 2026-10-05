@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.5.1] — 2026-10-05
+
+### Fixed
+
+- **The bundled scripts are found when the skill is installed from the marketplace.** The skill ran `analyze_git.py` and `scan_siblings.py` from `~/.claude/skills/cv-bullets/scripts/`, but a marketplace install puts the plugin in Claude Code's plugin cache, so those commands failed. Script paths now point at wherever the skill is actually installed. (`SKILL.md`, `references/AUTHORSHIP_GATE.md`, `references/DIALOG_GATE.md`.)
+
 ## [0.5.0] — 2026-06-18
 
 ### Added

@@ -14,9 +14,10 @@ measurably degrades behavior (the cv-bullets dialog gate got under-executed once
 long examples — into `references/*.md` that the workflow points to on demand, and keep
 `SKILL.md` to the workflow skeleton. Link every `references/*.md` directly from `SKILL.md`,
 not from another reference — Claude reads nested files only partially. Runnable script
-commands in any of these files use absolute `~/.claude/skills/<skill>/scripts/…` paths,
-because the working directory at
-runtime is the user's project, not the skill folder.
+commands use `${CLAUDE_SKILL_DIR}/scripts/…` in `SKILL.md` and `<skill_dir>/scripts/…` in
+`references/*.md`, with `SKILL.md` saying what `<skill_dir>` means. The working directory
+at runtime is the user's project, a marketplace install lives in Claude Code's plugin
+cache, and Claude Code documents `${CLAUDE_SKILL_DIR}` substitution only for `SKILL.md`.
 
 ## One home per fact across the doc layers
 

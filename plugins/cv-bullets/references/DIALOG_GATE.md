@@ -9,7 +9,7 @@ Read this when you reach Question 1 in a `full`-mode run.
 Before asking anything, run the scan to get data-driven context:
 
 ```bash
-python3 ~/.claude/skills/cv-bullets/scripts/scan_siblings.py --author "<git_author_pattern>"
+python3 <skill_dir>/scripts/scan_siblings.py --author "<git_author_pattern>"
 ```
 
 Pass the `git_author_pattern` from `config.md` via `--author` — it's more reliable than
