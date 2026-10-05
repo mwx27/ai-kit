@@ -1,10 +1,10 @@
-# claude-code-skills
+# ai-kit
 
-A personal marketplace of [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills by [@mwx27](https://github.com/mwx27). Each skill is packaged as an installable plugin so you can add it to your own Claude Code setup with a couple of commands.
+A personal marketplace of plugins and skills for AI coding agents by [@mwx27](https://github.com/mwx27) — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) now, Codex planned.
 
 ## Status & scope
 
-These are primarily personal skills, published mainly so they're easy to version, iterate on, and reinstall across machines — not (yet) turnkey tools for general use.
+These are personal tools, published so they're easy to version and reinstall across machines — not (yet) turnkey for general use.
 
 `cv-bullets` in particular is tightly coupled to my own CV: it assumes a specific data shape (`content/cv.pl.ts` / `content/cv.en.ts`, with `aiItExperience` / `itExperience` sections and a particular field schema) and bilingual Polish/English output. The CV itself isn't in this repo (it's live at [maciejwojda.cv](https://maciejwojda.cv)), and `config.md` externalizes only paths and your git-author pattern — not the CV structure. So it fits my setup out of the box, less so yours.
 
@@ -12,11 +12,11 @@ None of that is fundamental, though: the coupling lives in assumptions (CV schem
 
 ## Installation
 
-Add this marketplace, then install a skill from it:
+Add this marketplace, then install a plugin from it:
 
 ```
-/plugin marketplace add mwx27/claude-code-skills
-/plugin install cv-bullets
+/plugin marketplace add mwx27/ai-kit
+/plugin install cv-bullets@mwx27-ai-kit
 ```
 
 ## Configuration

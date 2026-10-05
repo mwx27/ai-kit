@@ -1,10 +1,10 @@
 # CLAUDE.md — maintaining this repo
 
-A personal Claude Code skill marketplace. Each skill is an installable plugin under
-`skills/<name>/` (manifest in `.claude-plugin/plugin.json`, registered in
-`marketplace.json`); user-facing intro and install steps live in `README.md`. The notes
-below are conventions for *editing* skills here that aren't obvious from the tree — they
-deliberately don't restate the README or the global git rules in `~/.claude/CLAUDE.md`.
+A personal plugin marketplace. Each plugin lives under `plugins/<name>/` (manifest in
+`.claude-plugin/plugin.json`, registered in `.claude-plugin/marketplace.json`); user-facing
+intro and install steps live in `README.md`. The notes below are conventions for *editing*
+skills here that aren't obvious from the tree — they deliberately don't restate the README
+or the global git rules in `~/.claude/CLAUDE.md`.
 
 ## Keep `SKILL.md` lean
 
