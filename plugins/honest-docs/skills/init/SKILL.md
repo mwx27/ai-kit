@@ -19,3 +19,13 @@ After a successful run, format the files it wrote the way the project formats Ma
 If it exits non-zero, it wrote nothing: a fragment is missing from `CLAUDE.md`, edited by hand,
 or there twice. Show the user the passage you take to be the fragment, if any, and ask with
 `AskUserQuestion` what to do — never edit it to match and rerun on your own.
+
+## The config it writes
+
+When the user asks what to put in `.claude/honest-docs.json`, read the page for the key.
+`<plugin_root>` in them means `${CLAUDE_PLUGIN_ROOT}`.
+
+- `guard.command` — what the Stop gate does with it and what the command must do:
+  [`hooks.md`](${CLAUDE_PLUGIN_ROOT}/references/hooks.md).
+- `instructionsLog` — the measurement it turns on:
+  [`instructions-log.md`](${CLAUDE_PLUGIN_ROOT}/references/instructions-log.md).

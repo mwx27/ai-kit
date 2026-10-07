@@ -47,3 +47,41 @@ Generate, refine, or analyze CV/resume bullets for software projects. It runs a 
 Alongside that private working inventory it also writes a redacted, public-safe version (client metrics, file paths, and teammate attribution stripped out) for outward-facing use such as a recruiter-facing chatbot — kept in sync with the private one, as a draft to review before you share it.
 
 One caveat worth knowing: to stop you from claiming a teammate's work, the skill checks `git blame` before it bullets any file. That check is a strong filter, not the last word — if you reformatted a whole repo (say, ran Prettier) or did heavy refactoring, git can credit you with code that is really someone else's. Treat its authorship calls as a guardrail and use your own judgement; you stay the final authority on what's genuinely yours.
+
+### honest-docs
+
+Your agent reads the docs. Make sure they're not lying. A plugin that keeps a project's docs and agent rules in step with its code:
+
+- At the end of every turn, it runs your project's own check script on the files the turn changed, and if it fails, the agent has to fix it before handing back. It gives up after three identical failures rather than looping.
+- It keeps each doc's `**Last Updated:**` date current, from when the file actually changed.
+- When code that a doc says it describes changes, it tells the agent to re-read that doc.
+- `honest-docs-check` catches docs that point at files, headings, paths or scripts that no longer exist; `/honest-docs:docs-audit` goes further and checks what the docs claim against the code.
+
+Whether a sentence is still true is something only a reader can judge: you, or the audit.
+
+**Install.** It is meant to run only in projects that opt in. Add the marketplace and install the plugin:
+
+```
+/plugin marketplace add mwx27/ai-kit
+/plugin install honest-docs@mwx27-ai-kit
+```
+
+Then turn it on in the project's `.claude/settings.json`:
+
+```json
+{ "enabledPlugins": { "honest-docs@mwx27-ai-kit": true } }
+```
+
+If your install turned it on for every project, set the same entry to `false` in `~/.claude/settings.json`; the project's setting wins. Start a new session in the project and run `/honest-docs:init`. It writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md`; run it again after every plugin update.
+
+**Connect your check script.** The end-of-turn check, and with it the date updates, does nothing until `.claude/honest-docs.json` names the command to run:
+
+```json
+{ "guard": { "command": ["bash", "scripts/guard.sh"] } }
+```
+
+The plugin calls it with `--changed` and the changed files; a non-zero exit means it failed. What the command must do, and every other setting, is in [`references/hooks.md`](plugins/honest-docs/references/hooks.md) and [`core/config.mjs`](plugins/honest-docs/core/config.mjs).
+
+The plugin keeps its working files in `artifacts/claude-hooks/` and `artifacts/logs/` in the project; add `artifacts/` to `.gitignore`, or move them with `stateDir` and `logDir`.
+
+**Limitations.** `honest-docs-check` needs a `package.json` and a `CLAUDE.md` in the project, and the end-of-turn check cannot tell your own mid-session edits from the agent's. Changes are in [`CHANGELOG.md`](plugins/honest-docs/CHANGELOG.md).

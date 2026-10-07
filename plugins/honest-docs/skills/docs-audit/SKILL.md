@@ -22,6 +22,8 @@ Paths below are the defaults. Where the project's `.claude/honest-docs.json` set
 Docs are the Markdown files under `_docs/` (not the `undated` folders), `.claude/rules/` and
 `.claude/skills/`, plus `CLAUDE.md` and `README.md`.
 
+The plugin's reference pages linked below write `<plugin_root>` for `${CLAUDE_PLUGIN_ROOT}`.
+
 - `<doc>…` — each named doc, every line.
 - `--changed` — every doc that differs from `HEAD` or is untracked; only the changed lines
   (`git diff HEAD -U0`), a whole file if it is new. A changed line inside a code block, list, table
@@ -36,11 +38,14 @@ Docs are the Markdown files under `_docs/` (not the `undated` folders), `.claude
 A claim is one fact the text states about this repo's code. A line can carry several: a symbol
 named is one claim, each thing said about it another. In a code block, every line that names code
 is a claim. A list that reads as complete claims to be complete. Not judged: what `docs-check`
-already verifies (link paths, anchors, backticked paths, `npm run` names), rationale with no fact
+already verifies (link paths, anchors, backticked paths, `npm run` names; the full list and its
+blind spots are in [`docs-check.md`](${CLAUDE_PLUGIN_ROOT}/references/docs-check.md)), rationale with no fact
 about the code, facts about services outside the repo that the repo does not state itself (a
 library is not a service: see step 2), history. A `covers:` or `paths:` glob is a claim too:
 `docs-check` only proves a `covers:` glob matches something, and nothing checks `paths:` — judge
-whether each names the code the doc or rule is about.
+whether each names the code the doc or rule is about. When a rule loads, and why a glob that names
+the wrong code fails silently, is in
+[`instruction-channels.md`](${CLAUDE_PLUGIN_ROOT}/references/instruction-channels.md).
 
 Nothing under `node_modules/` is opened — no `Read`, no `grep` of its contents — until the user
 selects it in a round at the end of _Report_: it is large and costly to read, it changes with every

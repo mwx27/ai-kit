@@ -92,9 +92,9 @@ for (const doc of docs) {
 
   /*
    * The guard gate only rewrites a date line that is already there, and the docs rule that asks for
-   * one never loads when a doc is created with Write — so a new doc without it would go undated
-   * forever. Failing here stops the turn; any date will do, the gate sets the real one on the next
-   * stop.
+   * one did not load when a doc was created with Write (observed, September 2026; the Claude Code
+   * documentation says Write loads it) — so a new doc without it would go undated forever. Failing
+   * here stops the turn; any date will do, the gate sets the real one on the next stop.
    */
   if (rel.startsWith(`${DOCS_DIR}/`) && !UNDATED.some((dir) => rel.startsWith(dir))) {
     const dated = lines.filter((text) => LAST_UPDATED_LINE.test(text)).length;

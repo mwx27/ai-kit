@@ -9,6 +9,11 @@
       "name": "cv-bullets",
       "source": "./plugins/cv-bullets",
       "description": "Generate, refine, or analyze CV/resume bullets for software projects — bilingual (Polish/English), repo-aware, with git metrics and a senior-vs-baseline filter."
+    },
+    {
+      "name": "honest-docs",
+      "source": "./plugins/honest-docs",
+      "description": "Your agent reads the docs. Make sure they're not lying."
     }
   ]
 }
