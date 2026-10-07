@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
 import { renderDocsRule } from '../core/init.mjs';
-import { PLUGIN_VERSION, fragment, runBin, tmpRepo } from './helpers.mjs';
+import { PLUGIN_VERSION, fragment, runBin, tmpRepo, writeDocsRule } from './helpers.mjs';
 
 const HEAD = '# Project\n\n## CRITICAL\n\n- Keep it short.\n- ';
 const MIDDLE = '\n\n## Docs\n\n';
@@ -99,21 +99,23 @@ test('a fragment wrapped differently is recognised and replaced, the rest of the
   assert.equal(read(root, 'CLAUDE.md'), after());
 });
 
-test('a fragment with a changed word: exit 1, nothing written', (t) => {
+test('after the first run, a fragment with a changed word: exit 1, nothing written', (t) => {
   const changed = fragment('docs-policy', 'pre-0.1.0').replace('A lying doc', 'A wrong doc');
   const text = claudeMd(fragment('read-line'), changed);
   const { root } = tmpRepo(t, { 'CLAUDE.md': text });
+  writeDocsRule(root); // stamped: an earlier run happened
 
   const run = init(root);
   assert.equal(run.status, 1);
   assert.equal(run.stdout, '');
   assert.equal(
     run.stderr,
-    'honest-docs-init: docs-policy: no version of the fragment found in CLAUDE.md; known versions are in templates/fragments/docs-policy/\n' +
+    'honest-docs-init: docs-policy: no version of the fragment found in CLAUDE.md, though /honest-docs:init has run here — ' +
+      'its words were changed; known versions are in templates/fragments/docs-policy/\n' +
       'honest-docs-init: nothing written\n'
   );
   assert.equal(read(root, 'CLAUDE.md'), text);
-  assert.equal(existsSync(path.join(root, '.claude')), false);
+  assert.equal(existsSync(path.join(root, '.claude/honest-docs.json')), false);
 });
 
 test('a fragment found twice: exit 1, nothing written', (t) => {
@@ -143,4 +145,57 @@ test('init leaves a tree that docs-check passes on the init category', (t) => {
   // Writing the file by hand afterwards with another stamp is what docs-check flags.
   writeFileSync(path.join(root, '.claude/rules/docs.md'), read(root, '.claude/rules/docs.md').replace(PLUGIN_VERSION, '0.0.1'));
   assert.match(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}init \(1\)$/m);
+});
+
+const PLAIN = '# Project\n\n## Rules\n\n- [docs](.claude/rules/docs.md)\n\nProject text.\n';
+const APPENDED = (names) =>
+  `honest-docs-init: appended ${names} to CLAUDE.md under "## honest-docs"; move them anywhere in the file, init finds them by their words`;
+
+test('first run without the fragments: both appended under one heading, the rest byte for byte', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': PLAIN, 'package.json': '{}' });
+  const run = init(root);
+
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(
+    run.stdout,
+    [
+      'honest-docs-init: wrote .claude/rules/docs.md',
+      'honest-docs-init: created .claude/honest-docs.json',
+      'honest-docs-init: wrote CLAUDE.md',
+      CHECK_NOTE,
+      NO_GUARD,
+      APPENDED('read-line and docs-policy'),
+      '',
+    ].join('\n')
+  );
+  assert.equal(
+    read(root, 'CLAUDE.md'),
+    `${PLAIN}\n## honest-docs\n\n${fragment('read-line')}\n\n${fragment('docs-policy')}\n`
+  );
+  assert.doesNotMatch(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}init \(/m);
+
+  // Second run: everything is found where it was appended.
+  assert.equal(init(root).stdout, `honest-docs-init: no changes\n${CHECK_NOTE}\n${NO_GUARD}\n`);
+});
+
+test('fragments moved by hand elsewhere in the file: still no changes', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': PLAIN });
+  init(root);
+  const moved = `# Project\n\n${fragment('docs-policy')}\n\n## Rules\n\n${fragment('read-line')}\n\n- [docs](.claude/rules/docs.md)\n\nProject text.\n`;
+  writeFileSync(path.join(root, 'CLAUDE.md'), moved);
+
+  const run = init(root);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, `honest-docs-init: no changes\n${CHECK_NOTE}\n${NO_GUARD}\n`);
+  assert.equal(read(root, 'CLAUDE.md'), moved);
+});
+
+test('first run with one fragment already there: only the missing one is appended', (t) => {
+  const text = `# Project\n\n${fragment('read-line')}\n`;
+  const { root } = tmpRepo(t, { 'CLAUDE.md': text });
+  const run = init(root);
+
+  assert.equal(run.status, 0, run.stderr);
+  assert.ok(run.stdout.endsWith(`${APPENDED('docs-policy')}\n`), run.stdout);
+  assert.equal(read(root, 'CLAUDE.md'), `${text}\n## honest-docs\n\n${fragment('docs-policy')}\n`);
 });

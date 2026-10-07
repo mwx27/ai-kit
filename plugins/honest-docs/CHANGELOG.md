@@ -12,6 +12,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 - **The Stop gate runs `honest-docs-check` itself**, on every turn that changed anything, before the project's guard; a docs failure blocks and the guard does not run. Without `guard.command` the gate now runs docs-check alone and stamps Last Updated dates instead of doing nothing. A guard that still runs docs-check keeps working, at the cost of running it twice.
 - Since the gate checks all the docs on every change, `honest-docs-check` must report no problems before the plugin is turned on; `/honest-docs:init` says so.
+- **`/honest-docs:init` works in any project on its first run.** It used to stop with an error unless `CLAUDE.md` already held both passages it maintains; now it adds the missing ones at the end of the file under `## honest-docs`, and they can be moved anywhere after that.
 
 ---
 

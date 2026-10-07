@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Writes the plugin's files into the project (core/init.mjs). Run as `honest-docs-init` (bin/).
-// Exits 1 and writes nothing when a CLAUDE.md fragment is not found exactly once.
+// Exits 1 and writes nothing when a CLAUDE.md fragment is there twice, or gone after the first run.
 
 import { CONFIG_FILE, loadConfig, projectRoot } from '../core/config.mjs';
 import { runInit } from '../core/init.mjs';

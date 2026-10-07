@@ -5,11 +5,17 @@
 //                           stamps the plugin version
 //   .claude/honest-docs.json  a skeleton, written only when the project has none
 //   index.file (CLAUDE.md)  two fragments — the `Read` line and the docs policy — each replaced
-//                           in place by its current version; the rest of the file is the project's
+//                           where it stands by its current version; the rest of the file is the
+//                           project's
 //
 // A fragment is found by the words of any version in templates/fragments/<name>/, whitespace
 // between them free, so a rewrap by hand or by Prettier still matches. A version named pre-<v> is
 // text that predates the plugin: recognised and replaced, never written.
+//
+// On the first run — no docs.md, or one without a stamp — a fragment found nowhere is appended to
+// the end of index.file under one `## honest-docs` heading, read-line first. The project may move
+// it anywhere: later runs find it by its words. Once a stamp exists, a fragment found nowhere had
+// its words changed, and that is an error. A fragment found twice is an error on every run.
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE } from './config.mjs';
@@ -17,6 +23,7 @@ import { PLUGIN_ROOT, pluginVersion } from './log.mjs';
 
 export const DOCS_RULE = '.claude/rules/docs.md';
 export const FRAGMENTS = ['read-line', 'docs-policy'];
+export const APPEND_HEADING = '## honest-docs';
 
 const TEMPLATES = path.join(PLUGIN_ROOT, 'templates');
 const STAMP = /^Written by \/honest-docs:init (\S+) — fixes go to the plugin, not this file\.$/;
@@ -64,7 +71,8 @@ export function stampOf(text) {
 
 /**
  * Plans the writes without making any. Returns `{ writes: [{ file, text }], notes, errors }`: a
- * write for each file whose content changes, and an error for each fragment not found exactly once.
+ * write for each file whose content changes, and an error for each fragment found twice or more, or
+ * found nowhere after the first run.
  */
 export function planInit(root, config) {
   const writes = [];
@@ -75,6 +83,7 @@ export function planInit(root, config) {
   const rule = renderDocsRule(config);
   const oldRule = existsSync(rulePath) ? readFileSync(rulePath, 'utf8') : null;
   if (oldRule !== rule) writes.push({ file: DOCS_RULE, text: rule });
+  const firstRun = oldRule === null || stampOf(oldRule) === null;
 
   if (!existsSync(path.join(root, CONFIG_FILE)))
     writes.push({ file: CONFIG_FILE, text: `${JSON.stringify(SKELETON, null, 2)}\n` });
@@ -89,13 +98,19 @@ export function planInit(root, config) {
   }
   const original = readFileSync(indexPath, 'utf8');
   let text = original;
+  const missing = [];
   for (const name of FRAGMENTS) {
     const versions = fragmentVersions(name);
     const found = findFragment(text, versions);
+    if (found.length === 0 && firstRun) {
+      missing.push({ name, text: versions[0].text });
+      continue;
+    }
     if (found.length !== 1) {
       errors.push(
         found.length === 0
-          ? `${name}: no version of the fragment found in ${indexFile}; known versions are in templates/fragments/${name}/`
+          ? `${name}: no version of the fragment found in ${indexFile}, though /honest-docs:init has run here — ` +
+              `its words were changed; known versions are in templates/fragments/${name}/`
           : `${name}: found ${found.length} times in ${indexFile} (${found.map((f) => f.version).join(', ')})`
       );
       continue;
@@ -103,6 +118,15 @@ export function planInit(root, config) {
     const [{ start, end, version }] = found;
     text = text.slice(0, start) + versions[0].text + text.slice(end);
     if (version !== versions[0].version) notes.push(`${name}: ${version} → ${versions[0].version}`);
+  }
+  if (missing.length > 0) {
+    // Appended after what is there, byte for byte: only a blank line is added before the heading.
+    const gap = text === '' ? '' : text.endsWith('\n') ? '\n' : '\n\n';
+    text += `${gap}${APPEND_HEADING}\n\n${missing.map((m) => m.text).join('\n\n')}\n`;
+    notes.push(
+      `appended ${missing.map((m) => m.name).join(' and ')} to ${indexFile} under "${APPEND_HEADING}"; ` +
+        'move them anywhere in the file, init finds them by their words'
+    );
   }
   if (text !== original) writes.push({ file: indexFile, text });
   return { writes, notes, errors };
