@@ -78,8 +78,8 @@ export function planInit(root, config) {
 
   if (!existsSync(path.join(root, CONFIG_FILE)))
     writes.push({ file: CONFIG_FILE, text: `${JSON.stringify(SKELETON, null, 2)}\n` });
-  if (!config.guard.command)
-    notes.push(`${CONFIG_FILE} sets no guard.command: in ${pluginVersion()} the Stop gate does nothing without one.`);
+  notes.push('honest-docs-check must report no problems: the Stop gate runs it over all docs on every change.');
+  if (!config.guard.command) notes.push(`${CONFIG_FILE} sets no guard.command: the Stop gate runs honest-docs-check alone.`);
 
   const indexFile = config.index.file;
   const indexPath = path.join(root, indexFile);

@@ -19,7 +19,8 @@ const after = () => claudeMd(fragment('read-line'), fragment('docs-policy'));
 
 const init = (root) => runBin('honest-docs-init', [], { cwd: root });
 const read = (root, file) => readFileSync(path.join(root, file), 'utf8');
-const NO_GUARD = `honest-docs-init: .claude/honest-docs.json sets no guard.command: in ${PLUGIN_VERSION} the Stop gate does nothing without one.`;
+const CHECK_NOTE = 'honest-docs-init: honest-docs-check must report no problems: the Stop gate runs it over all docs on every change.';
+const NO_GUARD = 'honest-docs-init: .claude/honest-docs.json sets no guard.command: the Stop gate runs honest-docs-check alone.';
 
 test('first run: writes the rule, the config skeleton and the current fragments', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': before() });
@@ -32,6 +33,7 @@ test('first run: writes the rule, the config skeleton and the current fragments'
       'honest-docs-init: wrote .claude/rules/docs.md',
       'honest-docs-init: created .claude/honest-docs.json',
       'honest-docs-init: wrote CLAUDE.md',
+      CHECK_NOTE,
       NO_GUARD,
       `honest-docs-init: docs-policy: pre-0.1.0 → ${PLUGIN_VERSION}`,
       '',
@@ -54,7 +56,7 @@ test('the rule takes docsDir and index.file from the config', (t) => {
   });
   const run = init(root);
   assert.equal(run.status, 0, run.stderr);
-  assert.equal(run.stdout, 'honest-docs-init: wrote .claude/rules/docs.md\n');
+  assert.equal(run.stdout, `honest-docs-init: wrote .claude/rules/docs.md\n${CHECK_NOTE}\n`);
   const rule = read(root, '.claude/rules/docs.md');
   assert.match(rule, /- 'docs\/\*\*\/\*\.md'/);
   assert.match(rule, /a line in the AGENTS\.md docs index/);
@@ -68,7 +70,7 @@ test('second run: no changes, nothing rewritten', (t) => {
 
   const run = init(root);
   assert.equal(run.status, 0);
-  assert.equal(run.stdout, `honest-docs-init: no changes\n${NO_GUARD}\n`);
+  assert.equal(run.stdout, `honest-docs-init: no changes\n${CHECK_NOTE}\n${NO_GUARD}\n`);
   assert.deepEqual(files.map((file) => read(root, file)), first);
 });
 
@@ -76,7 +78,7 @@ test('a config the project already has is left alone', (t) => {
   const config = '{ "docsDir": "_docs", "guard": { "command": ["bash", "guard.sh"] } }\n';
   const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '.claude/honest-docs.json': config });
   const run = init(root);
-  assert.equal(run.stdout, 'honest-docs-init: wrote .claude/rules/docs.md\n');
+  assert.equal(run.stdout, `honest-docs-init: wrote .claude/rules/docs.md\n${CHECK_NOTE}\n`);
   assert.equal(read(root, '.claude/honest-docs.json'), config);
 });
 

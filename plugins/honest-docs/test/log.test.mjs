@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { logEvent } from '../core/log.mjs';
-import { PLUGIN_ROOT, PLUGIN_VERSION, readLines, runBin, runHook, tmpRepo } from './helpers.mjs';
+import { PLUGIN_ROOT, PLUGIN_VERSION, docsBaseline, git, readLines, runBin, runHook, tmpRepo, writeDocsRule } from './helpers.mjs';
 
 const HEADER_FIELDS = ['ts', 'event', 'pluginVersion', 'project', 'pluginRoot'];
 
@@ -70,11 +70,14 @@ test('it never throws, even when the folder cannot be created', (t) => {
 });
 
 test('the hooks and scripts log their events; the instructions log does not', (t) => {
-  const { dir, root } = tmpRepo(t, { 'package.json': '{}', 'CLAUDE.md': '# x\n', 'src/a.ts': '1\n' });
+  // Docs that pass docs-check, committed, so the gate gets as far as the guard and passes.
+  const { dir, root } = tmpRepo(t, { ...docsBaseline(), 'src/a.ts': '1\n' });
+  writeDocsRule(root);
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'rule');
   const data = path.join(dir, 'data');
   mkdirSync(data);
   const env = { CLAUDE_PLUGIN_DATA: data };
-  mkdirSync(path.join(root, '.claude'));
   // Untracked, so the baseline has one dirty file to record.
   writeFileSync(path.join(root, '.claude/honest-docs.json'), JSON.stringify({ instructionsLog: true, guard: { command: ['true'] } }));
 
@@ -85,19 +88,21 @@ test('the hooks and scripts log their events; the instructions log does not', (t
   runBin('honest-docs-grep', ['x'], { cwd: root, env });
   runBin('honest-docs-check', [], { cwd: root, env });
 
+  // The gate runs docs-check before the guard, and that run logs too.
   const logged = events(data);
-  assert.deepEqual(logged.map((e) => e.event), ['baseline', 'gate', 'docs-grep', 'docs-check']);
+  assert.deepEqual(logged.map((e) => e.event), ['baseline', 'docs-check', 'gate', 'docs-grep', 'docs-check']);
   for (const e of logged) assert.deepEqual(Object.keys(e).slice(0, 5), HEADER_FIELDS);
   assert.deepEqual(
     { ...logged[0], ts: undefined },
     { ...logged[0], ts: undefined, written: true, source: 'startup', dirty: 1 }
   );
-  assert.equal(logged[1].outcome, 'pass');
-  assert.equal(logged[1].kind, 'ran');
-  assert.equal(logged[1].changed, 2);
-  assert.equal(logged[1].checked, 1);
-  assert.equal(logged[2].symbols, 1);
-  assert.equal(typeof logged[3].problems, 'number');
+  assert.equal(logged[1].problems, 0);
+  assert.equal(logged[2].outcome, 'pass');
+  assert.equal(logged[2].kind, 'ran');
+  assert.equal(logged[2].changed, 2);
+  assert.equal(logged[2].checked, 1);
+  assert.equal(logged[3].symbols, 1);
+  assert.equal(typeof logged[4].problems, 'number');
   // Metadata only: no file content or path from the tree in any record.
   assert.doesNotMatch(JSON.stringify(logged), /src\/a\.ts|CLAUDE\.md/);
 });

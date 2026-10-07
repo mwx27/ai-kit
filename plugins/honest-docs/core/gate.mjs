@@ -1,20 +1,26 @@
-// Stop gate: blocks the end of a turn that left the working tree failing the project's guard.
+// Stop gate: blocks the end of a turn that left the working tree failing docs-check or the
+// project's guard.
 //
-// It replaces the instruction telling the agent to remember to run the guard — a rule that costs
+// It replaces the instruction telling the agent to remember to run the checks — a rule that costs
 // context in every session and is forgotten in the one where it matters. Nothing is reimplemented
-// here: the checks live in the project's guard, which this calls as configured in `guard.command`
-// (core/config.mjs), with HONEST_DOCS_SCRIPTS pointing at the plugin's scripts/.
+// here: it runs the plugin's scripts/docs-check.mjs, then the project's guard as configured in
+// `guard.command` (core/config.mjs), with HONEST_DOCS_SCRIPTS pointing at the plugin's scripts/.
+//
+// docs-check runs first, on every stop with something to check, whatever changed: it scans the
+// whole docs tree, and a code change can break a doc as surely as a doc edit. A failure there blocks
+// as check `docs` and the guard does not run. Without `guard.command`, a passing docs-check passes.
 //
 // Guard contract: `<command…> --changed <files…>`, exit 0 on success. On failure it may print
 // `GUARD_FAIL check=<name>` to name the check (default `guard`). Its output for one failure must be
-// the same run to run, apart from what normalize() strips.
+// the same run to run, apart from what normalize() strips. It need not run docs-check; one that
+// still does runs it a second time, which costs time and nothing else.
 //
-// What it runs on: everything git reports as changed, minus what already passed the guard in this
-// exact content (core/session-state.mjs). It deliberately does not read a record of the agent's own
+// What it runs on: everything git reports as changed, minus what already passed in this exact
+// content (core/session-state.mjs). It deliberately does not read a record of the agent's own
 // Edit and Write calls — the agent also edits through Bash, so a `sed -i` turn slipped through in
 // silence. Silence is reserved for a tree with nothing left to check.
 //
-// It also writes to the tree, and only to docs: before the guard runs, each doc it is about to check
+// It also writes to the tree, and only to docs: before the checks run, each doc it is about to check
 // that carries a Last Updated line gets it restamped (core/last-updated.mjs).
 //
 // Loop protection is deliberately not "exit 0 on stop_hook_active" — that disarms the gate the
@@ -26,7 +32,8 @@
 // Every invocation appends one line to <logDir>/guard-gate-<session>.log:
 //   <ISO>  ran|skipped  changed=<n> checked=<n>  ms=<n>  pass|fail|giveup|error|-  [reason]
 // so the question "what does this gate actually cost per turn" is answered by the log, not by
-// an estimate. The same outcome goes to the shared event log (core/log.mjs).
+// an estimate. `ran` means docs-check was started. A pass with no guard configured carries the
+// reason `docs-check-only`. The same outcome goes to the shared event log (core/log.mjs).
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
@@ -39,6 +46,9 @@ import { sessionKey, sessionStore } from './session-state.mjs';
 
 /** Identical failures tolerated before the gate concedes and lets the stop through. */
 const MAX_REPEATS = 3;
+// docs-check and the guard run one after the other, so the two together must fit the Stop hook's
+// timeout (180 s in hooks/hooks.json), or Claude Code kills the gate before it can answer.
+const DOCS_CHECK_TIMEOUT_MS = 20_000;
 const GUARD_TIMEOUT_MS = 150_000;
 const DETAIL_LINES = 12;
 const LISTED_FILES = 10;
@@ -94,7 +104,7 @@ export function gate(input) {
   let session = 'unknown';
   let logDir = null;
 
-  /** One line per invocation. `ran` means the guard was started; `skipped` means it never was. */
+  /** One line per invocation. `ran` means docs-check was started; `skipped` means nothing was. */
   function audit(kind, changed, checked, outcome, reason = '', check = undefined) {
     const ms = Date.now() - start;
     logEvent(root, 'gate', { kind, outcome, reason: reason && reason !== check ? reason : undefined, check, changed, checked, ms });
@@ -126,12 +136,6 @@ export function gate(input) {
       return { exitCode: 0 };
     }
 
-    const command = config.guard.command;
-    if (!Array.isArray(command) || command.length === 0) {
-      audit('skipped', 0, 0, '-', 'no-guard-command');
-      return { exitCode: 0 };
-    }
-
     const excluded = ownDirs(config);
     const changed = changedFiles(root, excluded);
     if (changed === null) {
@@ -149,86 +153,108 @@ export function gate(input) {
       return { exitCode: 0 };
     }
 
-    // Stamped before the guard runs, so formatters and docs-check see the final content — and
+    // Stamped before the checks run, so formatters and docs-check see the final content — and
     // rehashed, so `verified` records the stamped file and the next stop does not take it for a new edit.
     if (stampLastUpdated(root, files, config.timeZone).length > 0) {
       const fresh = new Map((changedFiles(root, excluded) ?? []).map((entry) => [entry.path, entry.hash]));
       toCheck = toCheck.map((entry) => ({ ...entry, hash: fresh.get(entry.path) ?? entry.hash }));
     }
 
-    const guardStart = Date.now();
-    const run = spawnSync(command[0], [...command.slice(1), '--changed', ...files], {
-      cwd: root,
-      encoding: 'utf8',
-      timeout: GUARD_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
-      env: {
-        ...process.env,
-        HONEST_DOCS_SCRIPTS: path.join(process.env.CLAUDE_PLUGIN_ROOT || PLUGIN_ROOT, 'scripts'),
+    const scripts = path.join(process.env.CLAUDE_PLUGIN_ROOT || PLUGIN_ROOT, 'scripts');
+    const command = config.guard.command;
+    const hasGuard = Array.isArray(command) && command.length > 0;
+    const guardCommand = hasGuard ? command.join(' ') : '';
+    // docs-check first: a guard that fails on code would otherwise hide a broken doc until it passes.
+    const steps = [
+      {
+        name: 'docs-check',
+        check: 'docs',
+        argv: [process.execPath, path.join(scripts, 'docs-check.mjs')],
+        timeout: DOCS_CHECK_TIMEOUT_MS,
       },
-    });
-    const seconds = ((Date.now() - guardStart) / 1000).toFixed(1);
-    const ranMessage = `guard --changed: ${files.length} ${plural(files.length)}, ${seconds}s`;
+      ...(hasGuard
+        ? [{ name: 'guard --changed', check: null, argv: [...command, '--changed', ...files], timeout: GUARD_TIMEOUT_MS }]
+        : []),
+    ];
 
-    if (run.error || run.status === null) {
-      audit('ran', changed.length, files.length, 'error', run.error?.code ?? 'killed');
-      return { exitCode: 0 }; // A gate that cannot run must not be a gate that blocks.
-    }
+    const checksStart = Date.now();
+    const ran = [];
+    const ranMessage = () =>
+      `${ran.join(', ')}: ${files.length} ${plural(files.length)}, ${((Date.now() - checksStart) / 1000).toFixed(1)}s`;
 
-    if (run.status === 0) {
-      for (const { path: file, hash } of toCheck) {
-        state.verified[file] = hash;
-        delete state.gaveUp[file];
+    /** A failed check: blocks the stop, or lets it through on the third identical failure. */
+    function block(check, output, message) {
+      const fingerprint = createHash('sha256')
+        .update(JSON.stringify([files, normalize(output)]))
+        .digest('hex');
+      const repeats = state.failure?.fingerprint === fingerprint ? (state.failure.repeats ?? 1) + 1 : 1;
+
+      if (repeats >= MAX_REPEATS) {
+        // Recorded against the content that failed, not against the session: the moment one of these
+        // files is edited again its hash stops matching and the gate checks it afresh.
+        for (const { path: file, hash } of toCheck) state.gaveUp[file] = hash;
+        delete state.failure;
+        store.write(state);
+        audit('ran', changed.length, files.length, 'giveup', check, check);
+        const seeIt = check === 'docs' ? DOCS_CHECK_COMMAND : guardCommand;
+        return {
+          stdout: JSON.stringify({
+            systemMessage:
+              `${message} - ${check} still fails after ${repeats} identical attempts, letting the stop through. ` +
+              `Nothing was fixed; run \`${seeIt}\` to see it.`,
+          }),
+          exitCode: 0,
+        };
       }
-      delete state.failure;
-      store.write(state);
-      audit('ran', changed.length, files.length, 'pass');
-      return { stdout: JSON.stringify({ systemMessage: ranMessage }), exitCode: 0 };
+
+      // Only the counter is persisted on a failure. Nothing enters `verified`: the tree is still broken.
+      store.write({ ...state, failure: { fingerprint, repeats, check } });
+      audit('ran', changed.length, files.length, 'fail', check, check);
+
+      const reproduce = check === 'docs' ? DOCS_CHECK_COMMAND : `${guardCommand} --changed ${files.join(' ')}`;
+      const stderr = `${[
+        `Guard gate: ${check} failed on ${files.length} changed file(s).`,
+        fileList(files),
+        '',
+        errorDetails(output),
+        '',
+        `Fix it and stop again. To reproduce: ${reproduce}`,
+        repeats + 1 >= MAX_REPEATS ? 'One more identical failure and the gate gives up and lets the stop through.' : '',
+      ]
+        .filter(Boolean)
+        .join('\n')}\n`;
+      return { stdout: JSON.stringify({ systemMessage: message }), stderr, exitCode: 2 };
     }
 
-    const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
-    const check = failedCheck(output);
-    const guardCommand = command.join(' ');
-    const fingerprint = createHash('sha256')
-      .update(JSON.stringify([files, normalize(output)]))
-      .digest('hex');
-    const repeats = state.failure?.fingerprint === fingerprint ? (state.failure.repeats ?? 1) + 1 : 1;
+    for (const step of steps) {
+      ran.push(step.name);
+      const run = spawnSync(step.argv[0], step.argv.slice(1), {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: step.timeout,
+        maxBuffer: 8 * 1024 * 1024,
+        env: { ...process.env, HONEST_DOCS_SCRIPTS: scripts },
+      });
 
-    if (repeats >= MAX_REPEATS) {
-      // Recorded against the content that failed, not against the session: the moment one of these
-      // files is edited again its hash stops matching and the gate checks it afresh.
-      for (const { path: file, hash } of toCheck) state.gaveUp[file] = hash;
-      delete state.failure;
-      store.write(state);
-      audit('ran', changed.length, files.length, 'giveup', check, check);
-      const seeIt = check === 'docs' ? DOCS_CHECK_COMMAND : guardCommand;
-      return {
-        stdout: JSON.stringify({
-          systemMessage:
-            `${ranMessage} - ${check} still fails after ${repeats} identical attempts, letting the stop through. ` +
-            `Nothing was fixed; run \`${seeIt}\` to see it.`,
-        }),
-        exitCode: 0,
-      };
+      if (run.error || run.status === null) {
+        const code = run.error?.code ?? 'killed';
+        audit('ran', changed.length, files.length, 'error', step.check === 'docs' ? `docs-check ${code}` : code);
+        return { exitCode: 0 }; // A gate that cannot run must not be a gate that blocks.
+      }
+      if (run.status !== 0) {
+        const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
+        return block(step.check ?? failedCheck(output), output, ranMessage());
+      }
     }
 
-    // Only the counter is persisted on a failure. Nothing enters `verified`: the tree is still broken.
-    store.write({ ...state, failure: { fingerprint, repeats, check } });
-    audit('ran', changed.length, files.length, 'fail', check, check);
-
-    const reproduce = check === 'docs' ? DOCS_CHECK_COMMAND : `${guardCommand} --changed ${files.join(' ')}`;
-    const stderr = `${[
-      `Guard gate: ${check} failed on ${files.length} changed file(s).`,
-      fileList(files),
-      '',
-      errorDetails(output),
-      '',
-      `Fix it and stop again. To reproduce: ${reproduce}`,
-      repeats + 1 >= MAX_REPEATS ? 'One more identical failure and the gate gives up and lets the stop through.' : '',
-    ]
-      .filter(Boolean)
-      .join('\n')}\n`;
-    return { stdout: JSON.stringify({ systemMessage: ranMessage }), stderr, exitCode: 2 };
+    for (const { path: file, hash } of toCheck) {
+      state.verified[file] = hash;
+      delete state.gaveUp[file];
+    }
+    delete state.failure;
+    store.write(state);
+    audit('ran', changed.length, files.length, 'pass', hasGuard ? '' : 'docs-check-only');
+    return { stdout: JSON.stringify({ systemMessage: ranMessage() }), exitCode: 0 };
   } catch (error) {
     // Every internal failure ends here: a broken gate exits 0. It must never be the reason work
     // cannot be handed back.

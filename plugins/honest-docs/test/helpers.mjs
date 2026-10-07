@@ -7,6 +7,8 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadConfig } from '../core/config.mjs';
+import { renderDocsRule } from '../core/init.mjs';
 
 export const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PLUGIN_VERSION = JSON.parse(
@@ -90,3 +92,24 @@ export function runBin(command, args, { cwd, env = {} }) {
 
 export const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 export const readLines = (file) => readFileSync(file, 'utf8').split('\n').filter(Boolean);
+
+/** What docs-check needs besides the rule to pass: package.json, and CLAUDE.md with both fragments. */
+export const docsBaseline = () => ({
+  'package.json': '{ "name": "fixture" }\n',
+  'CLAUDE.md': `# Fixture
+
+${fragment('read-line')}
+
+## Docs
+
+${fragment('docs-policy')}
+
+## Rules
+
+- [docs](.claude/rules/docs.md)
+`,
+});
+
+/** Writes the rule /init writes, rendered from the project's config, so docs-check's `init` passes. */
+export const writeDocsRule = (root) =>
+  writeFiles(root, { '.claude/rules/docs.md': renderDocsRule(loadConfig(root)) });

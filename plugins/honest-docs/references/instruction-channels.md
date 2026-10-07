@@ -75,9 +75,10 @@ someone looks — the judgement is still a reader's: a person's, or an agent's r
 **The Stop gate blocks rather than reports** — exit 2 from the Stop hook, which keeps Claude from
 stopping _(documented)_ ([`hooks.md`](hooks.md#stop-gatemjs--stop)). The cost is asymmetric: a gate that fires when it
 needn't costs seconds of one turn, a gate that is missing costs a green commit with a broken tree
-behind it. The escape hatch, for when the gate itself is what's wrong, is removing `guard.command`
-from `.claude/honest-docs.json`: the gate reads it on every stop and does nothing without it, while
-the other hooks stay armed. Disabling the plugin takes all of them down.
+behind it. The escape hatch, for when the gate itself is what's wrong, is the give-up after three
+identical failures; removing `guard.command` from `.claude/honest-docs.json` takes the project's
+guard out but leaves docs-check. Only disabling the plugin turns the gate off, and every other hook
+with it.
 
 **The gate reads the changed-file list from git, not from a record of the agent's own writes.** The
 agent also changes files through Bash (`printf >>`, `sed -i`, `patch`), which a `PostToolUse` hook

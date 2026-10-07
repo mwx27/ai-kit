@@ -1,10 +1,11 @@
-// The Stop gate (hooks/stop-gate.mjs → core/gate.mjs), run as Claude Code runs it, against a guard
-// that lives outside the repo and passes or fails with whatever output the test hands it.
+// The Stop gate (hooks/stop-gate.mjs → core/gate.mjs), run as Claude Code runs it: the plugin's real
+// docs-check over a fixture whose docs pass it, then a guard that lives outside the repo and passes
+// or fails with whatever output the test hands it.
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { PLUGIN_ROOT, git, readJson, readLines, runHook, tmpRepo, writeFiles } from './helpers.mjs';
+import { PLUGIN_ROOT, docsBaseline, git, readJson, readLines, runHook, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const SESSION = 'gate-session';
 const STATE = `artifacts/claude-hooks/honest-docs-${SESSION}.json`;
@@ -17,14 +18,39 @@ process.stdout.write(process.env.GUARD_OUTPUT ?? '');
 process.exit(Number(process.env.GUARD_EXIT ?? 0));
 `;
 
-/** A repo with a guard configured, plus `stop()` to end a turn and `calls()` to see what the guard got. */
-function project(t, { config, files = {} } = {}) {
-  const { dir, root } = tmpRepo(t, { 'src/a.ts': 'export const a = 1;\n', 'src/b.ts': 'export const b = 1;\n', ...files });
+/**
+ * The C3 path: a guard that runs docs-check itself, as the template's guard.sh does, before failing
+ * or passing like GUARD.
+ */
+const DOCS_GUARD = `import { spawnSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
+appendFileSync(process.env.GUARD_RECORD, JSON.stringify({ args: process.argv.slice(2) }) + '\\n');
+const docs = spawnSync(process.execPath, [process.env.HONEST_DOCS_SCRIPTS + '/docs-check.mjs'], { encoding: 'utf8' });
+if (docs.status !== 0) {
+  process.stdout.write('=== Error details ===\\n' + docs.stdout + docs.stderr + 'GUARD_FAIL check=docs\\n');
+  process.exit(1);
+}
+process.stdout.write(process.env.GUARD_OUTPUT ?? '');
+process.exit(Number(process.env.GUARD_EXIT ?? 0));
+`;
+
+/**
+ * A repo whose docs pass docs-check, with a guard configured (`guard: null` for none, `'docs'` for
+ * DOCS_GUARD), plus `stop()` to end a turn and `calls()` to see what the guard got.
+ */
+function project(t, { config, files = {}, guard: guardKind = 'plain' } = {}) {
+  const { dir, root } = tmpRepo(t, {
+    ...docsBaseline(),
+    'src/a.ts': 'export const a = 1;\n',
+    'src/b.ts': 'export const b = 1;\n',
+    ...files,
+  });
   const guard = path.join(dir, 'guard.mjs');
   const record = path.join(dir, 'guard-calls.jsonl');
-  writeFileSync(guard, GUARD);
+  writeFileSync(guard, guardKind === 'docs' ? DOCS_GUARD : GUARD);
+  writeDocsRule(root);
   writeFiles(root, {
-    '.claude/honest-docs.json': JSON.stringify(config ?? { guard: { command: ['node', guard] } }),
+    '.claude/honest-docs.json': JSON.stringify(config ?? (guardKind === null ? {} : { guard: { command: ['node', guard] } })),
   });
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'config');
@@ -54,7 +80,7 @@ test('pass: the guard gets the changed files, the gate records them as verified'
   const run = p.stop();
   assert.equal(run.status, 0);
   assert.equal(run.stderr, '');
-  assert.match(run.message, /^guard --changed: 1 plik, \d+\.\ds$/);
+  assert.match(run.message, /^docs-check, guard --changed: 1 plik, \d+\.\ds$/);
 
   const [call] = p.calls();
   assert.deepEqual(call.args, ['--changed', 'src/a.ts']);
@@ -85,7 +111,7 @@ test('pass: the message agrees with the number of files', (t) => {
   const p = project(t);
   p.write('src/a.ts', 'export const a = 2;\n');
   p.write('src/b.ts', 'export const b = 2;\n');
-  assert.match(p.stop().message, /^guard --changed: 2 pliki, /);
+  assert.match(p.stop().message, /^docs-check, guard --changed: 2 pliki, /);
 });
 
 test('a clean tree runs nothing', (t) => {
@@ -97,7 +123,7 @@ test('a clean tree runs nothing', (t) => {
   assert.match(p.gateLog()[0], / {2}skipped {2}changed=0 checked=0 {2}ms=\d+ {2}- {2}nothing-new$/);
 });
 
-test('fail with GUARD_FAIL check=docs: blocks and points at honest-docs-check', (t) => {
+test('fail with GUARD_FAIL check=docs from the guard: blocks and points at honest-docs-check', (t) => {
   const p = project(t);
   p.write('src/a.ts', 'export const a = 2;\n');
   const run = p.stop({ exit: 1, output: 'links (1)\n  _docs/x.md:3  no such file: y.md\nGUARD_FAIL check=docs\n' });
@@ -112,7 +138,7 @@ test('fail with GUARD_FAIL check=docs: blocks and points at honest-docs-check', 
       '      _docs/x.md:3  no such file: y.md\n' +
       'Fix it and stop again. To reproduce: honest-docs-check\n'
   );
-  assert.match(run.message, /^guard --changed: 1 plik, /);
+  assert.match(run.message, /^docs-check, guard --changed: 1 plik, /);
   assert.equal(p.state().failure.check, 'docs');
   assert.equal(p.state().failure.repeats, 1);
   assert.deepEqual(p.state().verified, {});
@@ -160,7 +186,7 @@ test('the third identical failure lets the stop through and records gaveUp', (t)
   assert.match(
     third.message,
     new RegExp(
-      `^guard --changed: 1 plik, \\d+\\.\\ds - eslint still fails after 3 identical attempts, letting the stop through\\. ` +
+      `^docs-check, guard --changed: 1 plik, \\d+\\.\\ds - eslint still fails after 3 identical attempts, letting the stop through\\. ` +
         `Nothing was fixed; run \`node ${p.guard}\` to see it\\.$`
     )
   );
@@ -233,20 +259,103 @@ test('permission_mode=plan: never runs the guard, never blocks', (t) => {
 const LAST_UPDATED_DOC = '# Doc\n\n**Last Updated:** 2000-01-01 00:00 CET\n\nText.\n';
 const MTIME = new Date('2026-01-15T09:30:00Z'); // 10:30 CET in Warsaw
 
-// Known limitation of 0.1.0 (CHANGELOG): without guard.command the gate skips everything, the
-// Last Updated stamp included. 0.1.x is planned to stamp and run docs-check anyway; this test then changes.
-test('0.1.0 limitation: no guard.command does nothing at all, not even the date stamp', (t) => {
-  const p = project(t, { config: { timeZone: 'Europe/Warsaw' }, files: { '_docs/doc.md': LAST_UPDATED_DOC } });
-  p.write('_docs/doc.md', `${LAST_UPDATED_DOC}More.\n`);
-  utimesSync(path.join(p.root, '_docs/doc.md'), MTIME, MTIME);
+const BROKEN_DOC = '# Doc\n\n**Last Updated:** 2026-01-15 10:30 CET\n\nSee [gone](gone.md).\n';
+
+test('no guard.command: a broken link in the docs blocks a code-only change, as check docs', (t) => {
+  const p = project(t, { guard: null, files: { '_docs/doc.md': BROKEN_DOC } });
+  p.write('src/a.ts', 'export const a = 2;\n');
 
   const run = p.stop();
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /^Guard gate: docs failed on 1 changed file\(s\)\.\n {2}src\/a\.ts\n/);
+  assert.match(run.stderr, /_docs\/doc\.md:5 {2}no such file: gone\.md\n/);
+  assert.ok(run.stderr.endsWith('Fix it and stop again. To reproduce: honest-docs-check\n'), run.stderr);
+  assert.match(run.message, /^docs-check: 1 plik, \d+\.\ds$/);
+  assert.equal(p.state().failure.check, 'docs');
+  assert.deepEqual(p.state().verified, {});
+  assert.match(p.gateLog()[0], / {2}ran {2}changed=1 checked=1 {2}ms=\d+ {2}fail {2}docs$/);
+});
+
+test('no guard.command: the third identical docs failure gives up and points at honest-docs-check', (t) => {
+  const p = project(t, { guard: null, files: { '_docs/doc.md': BROKEN_DOC } });
+  p.write('src/a.ts', 'export const a = 2;\n');
+  assert.equal(p.stop().status, 2);
+  assert.equal(p.stop().status, 2);
+  const run = p.stop();
   assert.equal(run.status, 0);
-  assert.equal(run.stdout, '');
+  assert.match(run.message, /^docs-check: 1 plik, \d+\.\ds - docs still fails after 3 identical attempts, .*run `honest-docs-check` to see it\.$/);
+  assert.deepEqual(p.state().gaveUp, { 'src/a.ts': p.hash('src/a.ts') });
+});
+
+test('no guard.command: clean docs pass, the doc is stamped and verified', (t) => {
+  const p = project(t, { guard: null, config: { timeZone: 'Europe/Warsaw' }, files: { '_docs/doc.md': LAST_UPDATED_DOC } });
+  const doc = path.join(p.root, '_docs/doc.md');
+  p.write('_docs/doc.md', `${LAST_UPDATED_DOC}More.\n`);
+  utimesSync(doc, MTIME, MTIME);
+
+  const run = p.stop();
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stderr, '');
+  assert.match(run.message, /^docs-check: 1 plik, \d+\.\ds$/);
+  assert.equal(readFileSync(doc, 'utf8'), '# Doc\n\n**Last Updated:** 2026-01-15 10:30 CET\n\nText.\nMore.\n');
+  assert.deepEqual(p.state().verified, { '_docs/doc.md': p.hash('_docs/doc.md') });
   assert.equal(p.calls().length, 0);
-  assert.match(readFileSync(path.join(p.root, '_docs/doc.md'), 'utf8'), /\*\*Last Updated:\*\* 2000-01-01 00:00 CET/);
-  assert.equal(existsSync(path.join(p.root, STATE)), false);
-  assert.match(p.gateLog()[0], / {2}skipped {2}changed=0 checked=0 {2}ms=\d+ {2}- {2}no-guard-command$/);
+  assert.match(p.gateLog()[0], / {2}ran {2}changed=1 checked=1 {2}ms=\d+ {2}pass {2}docs-check-only$/);
+  assert.equal(p.stop().stdout, '');
+});
+
+test('with guard.command: docs-check fails first, so the guard never runs', (t) => {
+  const p = project(t, { files: { '_docs/doc.md': BROKEN_DOC } });
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop({ exit: 1, output: FAIL_OUTPUT });
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /^Guard gate: docs failed on 1 changed file\(s\)\./);
+  assert.match(run.message, /^docs-check: 1 plik, /);
+  assert.equal(p.calls().length, 0);
+  assert.equal(p.state().failure.check, 'docs');
+});
+
+test('with guard.command: docs pass and the guard fails, so it blocks with the guard\'s check', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop({ exit: 1, output: FAIL_OUTPUT });
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /^Guard gate: eslint failed on 1 changed file\(s\)\./);
+  assert.match(run.message, /^docs-check, guard --changed: 1 plik, /);
+  assert.equal(p.calls().length, 1);
+  assert.match(p.gateLog()[0], / {2}fail {2}eslint$/);
+});
+
+// C3: a guard written for 0.1.0 runs docs-check itself, as the template's guard.sh does. It keeps
+// working: docs-check runs twice when the docs pass, and the gate's own run catches them first when not.
+test('old path: a guard that runs docs-check itself passes on clean docs', (t) => {
+  const p = project(t, { guard: 'docs' });
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop();
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.message, /^docs-check, guard --changed: 1 plik, /);
+  assert.deepEqual(p.calls()[0].args, ['--changed', 'src/a.ts']);
+  assert.deepEqual(p.state().verified, { 'src/a.ts': p.hash('src/a.ts') });
+  assert.match(p.gateLog()[0], / {2}pass$/);
+});
+
+test('old path: a guard that runs docs-check itself blocks with its own check', (t) => {
+  const p = project(t, { guard: 'docs' });
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop({ exit: 1, output: FAIL_OUTPUT });
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /^Guard gate: eslint failed on 1 changed file\(s\)\./);
+  assert.equal(p.state().failure.check, 'eslint');
+});
+
+test('old path: broken docs block as check docs before the guard runs', (t) => {
+  const p = project(t, { guard: 'docs', files: { '_docs/doc.md': BROKEN_DOC } });
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop();
+  assert.equal(run.status, 2);
+  assert.ok(run.stderr.endsWith('To reproduce: honest-docs-check\n'), run.stderr);
+  assert.equal(p.calls().length, 0);
+  assert.equal(p.state().failure.check, 'docs');
 });
 
 test('Last Updated is stamped from the mtime, in the configured zone, and the mtime is kept', (t) => {

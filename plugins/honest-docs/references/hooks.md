@@ -53,22 +53,27 @@ broken as fine. An existing state file is therefore left untouched, whatever the
 
 ## `stop-gate.mjs` — Stop
 
-Runs the project's guard over the changed files and exits 2 if it fails, which sends the failure
-back to the agent instead of ending the turn _(documented)_. It replaces the instruction to remember to run the
-guard before finishing — a rule that has to fire in every session and is forgotten in the one that
-matters.
+Runs `honest-docs-check`, then the project's guard over the changed files, and exits 2 if either
+fails, which sends the failure back to the agent instead of ending the turn _(documented)_. It
+replaces the instruction to remember to run the checks before finishing — a rule that has to fire in
+every session and is forgotten in the one that matters.
 
-**Without `guard.command` it does nothing.** In 0.1.0, a project whose `.claude/honest-docs.json`
-sets no `guard.command` gets no gate and no date stamps: the gate logs `no-guard-command` and exits
-0 before it looks at the tree. `/honest-docs:init` says so when it runs.
+**docs-check runs on every stop with something to check**, whatever changed: it scans all the docs,
+and a code change can falsify a path or a `covers:` glob as surely as a doc edit. A failure blocks
+as check `docs` and the guard does not run. Without `guard.command`, docs-check is the whole gate:
+a pass logs `docs-check-only`. Because the gate checks all the docs, not only the changed ones,
+`honest-docs-check` must report no problems before the plugin is turned on in a project, or every
+turn blocks on docs it never touched.
 
 ### The guard contract
 
 - `guard.command` is an argv array. The gate runs `<argv…> --changed <files…>` from the project
-  root, with `HONEST_DOCS_SCRIPTS` set to the plugin's `scripts/` folder, so the guard can run
-  `node "$HONEST_DOCS_SCRIPTS/docs-check.mjs"` without knowing where the plugin is installed.
-- Exit 0 passes; any other exit code fails. A guard that cannot start, or runs past 150 s and is
-  killed, counts as neither: the gate logs `error` and exits 0.
+  root, after docs-check has passed, with `HONEST_DOCS_SCRIPTS` set to the plugin's `scripts/` folder.
+- The guard need not run docs-check. One that still does (`node "$HONEST_DOCS_SCRIPTS/docs-check.mjs"`)
+  runs it a second time, which costs a second run and nothing else.
+- Exit 0 passes; any other exit code fails. A guard or docs-check that cannot start, or is killed
+  past its timeout (150 s for the guard, 20 s for docs-check), counts as neither: the gate logs
+  `error` and exits 0.
 - A line `GUARD_FAIL check=<name>` in the output names the failed check; without one it is `guard`.
   With `check=docs` the gate's messages tell the agent to run `honest-docs-check`; with any other
   check, the guard command.
@@ -88,14 +93,14 @@ broken object store) returns null and the gate passes: it then knows nothing abo
 gate that knows nothing must not block.
 
 **The session state is keyed by content, not by path** (`<stateDir>/honest-docs-<session>.json`,
-shape documented in `<plugin_root>/core/session-state.mjs`). A file that passed the guard in exactly
+shape documented in `<plugin_root>/core/session-state.mjs`). A file that passed the checks in exactly
 this content sits in `verified` and is not re-checked; one the gate conceded on sits in `gaveUp`.
 Both entries stop applying the moment the file changes again, which is what makes the concession
 specific: it is a concession about one file in one state, not about the session.
 
 ### Last Updated stamps
 
-**The gate is also what dates the docs.** Before the guard runs, every `.md` among the files to
+**The gate is also what dates the docs.** Before the checks run, every `.md` among the files to
 check that carries a `**Last Updated:**` line gets it rewritten to the file's mtime, as
 `2026-10-07 14:05 CEST`, in the zone `timeZone` names (the system's by default;
 `<plugin_root>/core/last-updated.mjs`), and the stamped files are rehashed so `verified` holds the
@@ -135,8 +140,8 @@ started count, because the rest were baselined.
 **No `statusMessage` in `hooks/hooks.json`** — it is shown while the hook runs _(documented)_, so on
 every Stop, including the turns where
 the hook exits in a millisecond because nothing changed. The gate is silent when it costs nothing
-and prints one line, like `guard --changed: 3 pliki, 2.4s`, only when it actually ran; silence is
-the signal.
+and prints one line naming what ran, like `docs-check, guard --changed: 3 pliki, 2.4s`, only when it
+actually ran; silence is the signal.
 
 Every invocation that can read the config appends one line to `<logDir>/guard-gate-<session>.log` —
 `ran`/`skipped`, `changed=N checked=M`, milliseconds, `pass`/`fail`/`giveup`/`error` (`-` when
@@ -157,5 +162,5 @@ The gate, the doc reminder, the baseline, `honest-docs-check` and `honest-docs-g
 line per run to `events.jsonl` in the plugin's data folder (`CLAUDE_PLUGIN_DATA`): the event, the
 plugin version, the project folder's name, where the plugin is installed, and counts, outcomes and
 timings — never the content of a file or a prompt. Claude Code sets that folder for hooks and what
-they start _(documented)_, not for commands run from Bash _(observed, October 2026)_: `honest-docs-check` run by the guard from the gate
+they start _(documented)_, not for commands run from Bash _(observed, October 2026)_: `honest-docs-check` run by the gate
 logs, run by the agent in Bash it does not. The instruction log never writes here.

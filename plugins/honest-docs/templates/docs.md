@@ -57,9 +57,9 @@ dated layers inside the doc (`Correction, <date>`, `Since…`, `Caveat…`).
 real users arrive. A third-party dashboard setting, a task for a backend, a note that something is
 unverified: none of those belong, because nobody can clear them by editing this repo.
 
-`honest-docs-check` (part of the guard) verifies every link, anchor, path, npm script and
-`covers:` glob a doc names still resolves, and that every doc in `{{docsDir}}/` has its `Last Updated`
-line — it does not verify that prose is true. When covered code changes, a hook names the doc once
-per session; whether a sentence went false is yours to judge.
+`honest-docs-check` (run by the guard gate at the end of every turn) verifies every link, anchor,
+path, npm script and `covers:` glob a doc names still resolves, and that every doc in `{{docsDir}}/`
+has its `Last Updated` line — it does not verify that prose is true. When covered code changes, a
+hook names the doc once per session; whether a sentence went false is yours to judge.
 
 Written by /honest-docs:init {{version}} — fixes go to the plugin, not this file.

@@ -14,8 +14,8 @@
 //   stateDir        session state of the hooks; excluded from the changed files
 //   logDir          the gate's and the instructions log's files; excluded from the changed files
 //   timeZone        IANA zone of the Last Updated stamp (default: the system's)
-//   guard.command   argv of the project's guard, called as `<argv…> --changed <files…>`; with none
-//                   the Stop gate does nothing
+//   guard.command   argv of the project's guard, called as `<argv…> --changed <files…>` after
+//                   docs-check passes; with none the Stop gate runs docs-check alone
 //   instructionsLog true turns on the instructions log (a measurement, off by default)
 //   docsAudit       what /docs-audit treats as library, native and prebuild folders
 import { execFileSync } from 'node:child_process';

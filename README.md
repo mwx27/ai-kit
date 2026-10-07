@@ -74,13 +74,15 @@ Then turn it on in the project's `.claude/settings.json`:
 
 If your install turned it on for every project, set the same entry to `false` in `~/.claude/settings.json`; the project's setting wins. Start a new session in the project and run `/honest-docs:init`. It writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md`; run it again after every plugin update.
 
-**Connect your check script.** The end-of-turn check, and with it the date updates, does nothing until `.claude/honest-docs.json` names the command to run:
+At the end of every turn that changed something, the plugin runs `honest-docs-check` over all the docs and sends the agent back to fix what it finds, so make it report no problems before you turn the plugin on.
+
+**Connect your check script** (optional). To have the same end-of-turn check also run your own checks, name the command in `.claude/honest-docs.json`:
 
 ```json
 { "guard": { "command": ["bash", "scripts/guard.sh"] } }
 ```
 
-The plugin calls it with `--changed` and the changed files; a non-zero exit means it failed. What the command must do, and every other setting, is in [`references/hooks.md`](plugins/honest-docs/references/hooks.md) and [`core/config.mjs`](plugins/honest-docs/core/config.mjs).
+The plugin calls it with `--changed` and the changed files, after `honest-docs-check` passes; a non-zero exit means it failed. What the command must do, and every other setting, is in [`references/hooks.md`](plugins/honest-docs/references/hooks.md) and [`core/config.mjs`](plugins/honest-docs/core/config.mjs).
 
 The plugin keeps its working files in `artifacts/claude-hooks/` and `artifacts/logs/` in the project; add `artifacts/` to `.gitignore`, or move them with `stateDir` and `logDir`.
 
