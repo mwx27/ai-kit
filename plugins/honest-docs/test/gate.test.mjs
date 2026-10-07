@@ -1,0 +1,355 @@
+// The Stop gate (hooks/stop-gate.mjs → core/gate.mjs), run as Claude Code runs it, against a guard
+// that lives outside the repo and passes or fails with whatever output the test hands it.
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { test } from 'node:test';
+import { PLUGIN_ROOT, git, readJson, readLines, runHook, tmpRepo, writeFiles } from './helpers.mjs';
+
+const SESSION = 'gate-session';
+const STATE = `artifacts/claude-hooks/honest-docs-${SESSION}.json`;
+const GATE_LOG = `artifacts/logs/guard-gate-${SESSION}.log`;
+
+/** Records every call to GUARD_RECORD, prints GUARD_OUTPUT, exits GUARD_EXIT. */
+const GUARD = `import { appendFileSync } from 'node:fs';
+appendFileSync(process.env.GUARD_RECORD, JSON.stringify({ args: process.argv.slice(2), scripts: process.env.HONEST_DOCS_SCRIPTS, cwd: process.cwd() }) + '\\n');
+process.stdout.write(process.env.GUARD_OUTPUT ?? '');
+process.exit(Number(process.env.GUARD_EXIT ?? 0));
+`;
+
+/** A repo with a guard configured, plus `stop()` to end a turn and `calls()` to see what the guard got. */
+function project(t, { config, files = {} } = {}) {
+  const { dir, root } = tmpRepo(t, { 'src/a.ts': 'export const a = 1;\n', 'src/b.ts': 'export const b = 1;\n', ...files });
+  const guard = path.join(dir, 'guard.mjs');
+  const record = path.join(dir, 'guard-calls.jsonl');
+  writeFileSync(guard, GUARD);
+  writeFiles(root, {
+    '.claude/honest-docs.json': JSON.stringify(config ?? { guard: { command: ['node', guard] } }),
+  });
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'config');
+
+  const stop = ({ exit = 0, output = '', payload = {} } = {}) => {
+    const run = runHook(
+      'stop-gate',
+      { session_id: SESSION, cwd: root, hook_event_name: 'Stop', permission_mode: 'default', stop_hook_active: false, ...payload },
+      { root, env: { GUARD_RECORD: record, GUARD_EXIT: String(exit), GUARD_OUTPUT: output } }
+    );
+    return { ...run, message: run.stdout ? JSON.parse(run.stdout).systemMessage : undefined };
+  };
+  const calls = () => (existsSync(record) ? readLines(record).map((line) => JSON.parse(line)) : []);
+  const state = () => readJson(path.join(root, STATE));
+  const gateLog = () => readLines(path.join(root, GATE_LOG));
+  const hash = (file) => git(root, 'hash-object', file).trim();
+  const write = (file, text) => writeFileSync(path.join(root, file), text);
+  return { dir, root, guard, stop, calls, state, gateLog, hash, write };
+}
+
+const FAIL_OUTPUT = 'eslint: 1 error\n=== Error details ===\nsrc/a.ts:1 no-unused-vars\nGUARD_FAIL check=eslint files=1\n';
+
+test('pass: the guard gets the changed files, the gate records them as verified', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+
+  const run = p.stop();
+  assert.equal(run.status, 0);
+  assert.equal(run.stderr, '');
+  assert.match(run.message, /^guard --changed: 1 plik, \d+\.\ds$/);
+
+  const [call] = p.calls();
+  assert.deepEqual(call.args, ['--changed', 'src/a.ts']);
+  assert.equal(call.scripts, path.join(PLUGIN_ROOT, 'scripts'));
+  assert.equal(call.cwd, p.root);
+
+  const state = p.state();
+  assert.equal(state.version, 1);
+  assert.equal(state.session_id, SESSION);
+  assert.deepEqual(state.verified, { 'src/a.ts': p.hash('src/a.ts') });
+  assert.deepEqual(state.gaveUp, {});
+  assert.equal(state.failure, undefined);
+  assert.match(p.gateLog()[0], /^\S+Z {2}ran {2}changed=1 checked=1 {2}ms=\d+ {2}pass$/);
+});
+
+test('pass: the next stop on the same content runs nothing', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  p.stop();
+  const run = p.stop();
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout, '');
+  assert.equal(p.calls().length, 1);
+  assert.match(p.gateLog()[1], / {2}skipped {2}changed=1 checked=0 {2}ms=\d+ {2}- {2}nothing-new$/);
+});
+
+test('pass: the message agrees with the number of files', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  p.write('src/b.ts', 'export const b = 2;\n');
+  assert.match(p.stop().message, /^guard --changed: 2 pliki, /);
+});
+
+test('a clean tree runs nothing', (t) => {
+  const p = project(t);
+  const run = p.stop();
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout, '');
+  assert.equal(p.calls().length, 0);
+  assert.match(p.gateLog()[0], / {2}skipped {2}changed=0 checked=0 {2}ms=\d+ {2}- {2}nothing-new$/);
+});
+
+test('fail with GUARD_FAIL check=docs: blocks and points at honest-docs-check', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop({ exit: 1, output: 'links (1)\n  _docs/x.md:3  no such file: y.md\nGUARD_FAIL check=docs\n' });
+
+  assert.equal(run.status, 2);
+  // The '' separators in core/gate.mjs fall to .filter(Boolean), so no blank lines — as in the template.
+  assert.equal(
+    run.stderr,
+    'Guard gate: docs failed on 1 changed file(s).\n' +
+      '  src/a.ts\n' +
+      '    links (1)\n' +
+      '      _docs/x.md:3  no such file: y.md\n' +
+      'Fix it and stop again. To reproduce: honest-docs-check\n'
+  );
+  assert.match(run.message, /^guard --changed: 1 plik, /);
+  assert.equal(p.state().failure.check, 'docs');
+  assert.equal(p.state().failure.repeats, 1);
+  assert.deepEqual(p.state().verified, {});
+  assert.match(p.gateLog()[0], / {2}ran {2}changed=1 checked=1 {2}ms=\d+ {2}fail {2}docs$/);
+});
+
+test('fail without GUARD_FAIL: the check is "guard" and the reproduce line is the guard command', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop({ exit: 3, output: 'something broke\n' });
+
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /^Guard gate: guard failed on 1 changed file\(s\)\.\n {2}src\/a\.ts\n {4}something broke\n/);
+  assert.ok(run.stderr.endsWith(`To reproduce: node ${p.guard} --changed src/a.ts\n`), run.stderr);
+  assert.equal(p.state().failure.check, 'guard');
+});
+
+test('fail: only the error details reach the agent, at most 12 lines', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const details = Array.from({ length: 20 }, (_, i) => `detail ${i + 1}`).join('\n');
+  const run = p.stop({ exit: 1, output: `noise before\n=== Error details ===\n${details}\nGUARD_FAIL check=tsc\nsrc/a.ts\n` });
+
+  assert.doesNotMatch(run.stderr, /noise before/);
+  assert.match(run.stderr, / {4}detail 12\n/);
+  assert.doesNotMatch(run.stderr, /detail 13/);
+});
+
+test('the third identical failure lets the stop through and records gaveUp', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+
+  const first = p.stop({ exit: 1, output: FAIL_OUTPUT });
+  assert.equal(first.status, 2);
+  assert.doesNotMatch(first.stderr, /One more identical failure/);
+
+  const second = p.stop({ exit: 1, output: FAIL_OUTPUT });
+  assert.equal(second.status, 2);
+  assert.match(second.stderr, /One more identical failure and the gate gives up and lets the stop through\.\n$/);
+  assert.equal(p.state().failure.repeats, 2);
+
+  const third = p.stop({ exit: 1, output: FAIL_OUTPUT });
+  assert.equal(third.status, 0);
+  assert.equal(third.stderr, '');
+  assert.match(
+    third.message,
+    new RegExp(
+      `^guard --changed: 1 plik, \\d+\\.\\ds - eslint still fails after 3 identical attempts, letting the stop through\\. ` +
+        `Nothing was fixed; run \`node ${p.guard}\` to see it\\.$`
+    )
+  );
+
+  const state = p.state();
+  assert.deepEqual(state.gaveUp, { 'src/a.ts': p.hash('src/a.ts') });
+  assert.deepEqual(state.verified, {});
+  assert.equal(state.failure, undefined);
+  assert.match(p.gateLog()[2], / {2}ran {2}changed=1 checked=1 {2}ms=\d+ {2}giveup {2}eslint$/);
+
+  // The concession holds for this content only: the next stop skips it, an edit brings it back.
+  assert.equal(p.stop({ exit: 1, output: FAIL_OUTPUT }).stdout, '');
+  assert.equal(p.calls().length, 3);
+  p.write('src/a.ts', 'export const a = 3;\n');
+  assert.equal(p.stop({ exit: 1, output: FAIL_OUTPUT }).status, 2);
+});
+
+test('giving up on check=docs points at honest-docs-check', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  for (let i = 0; i < 2; i++) p.stop({ exit: 1, output: 'GUARD_FAIL check=docs\n' });
+  const run = p.stop({ exit: 1, output: 'GUARD_FAIL check=docs\n' });
+  assert.equal(run.status, 0);
+  assert.match(run.message, /run `honest-docs-check` to see it\.$/);
+});
+
+test('failures that differ only in timings, colour and log stamps count as identical', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  p.stop({ exit: 1, output: 'tsc failed (12s) log 20260101_101010\n' });
+  p.stop({ exit: 1, output: '\u001b[31mtsc failed\u001b[0m (3s) log 20260102_111111\n' });
+  assert.equal(p.stop({ exit: 1, output: 'tsc failed (40s) log 20260103_121212\n' }).status, 0);
+});
+
+test('stop_hook_active: true does not disarm the gate, the repeat count grows as with false', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  assert.equal(p.stop({ exit: 1, output: FAIL_OUTPUT }).status, 2);
+  assert.equal(p.state().failure.repeats, 1);
+
+  const run = p.stop({ exit: 1, output: FAIL_OUTPUT, payload: { stop_hook_active: true } });
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /^Guard gate: eslint failed on 1 changed file\(s\)\./);
+  assert.equal(p.state().failure.repeats, 2);
+  assert.equal(p.calls().length, 2);
+});
+
+test('different failures in the same file keep blocking', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  for (let i = 1; i <= 4; i++) {
+    const run = p.stop({ exit: 1, output: `src/a.ts:${i} error ${i}\nGUARD_FAIL check=eslint\n` });
+    assert.equal(run.status, 2, `stop ${i}`);
+    assert.equal(p.state().failure.repeats, 1);
+  }
+  assert.deepEqual(p.state().gaveUp, {});
+});
+
+test('permission_mode=plan: never runs the guard, never blocks', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop({ exit: 1, output: FAIL_OUTPUT, payload: { permission_mode: 'plan' } });
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout, '');
+  assert.equal(p.calls().length, 0);
+  assert.equal(existsSync(path.join(p.root, STATE)), false);
+  assert.match(p.gateLog()[0], / {2}skipped {2}changed=0 checked=0 {2}ms=\d+ {2}- {2}plan-mode$/);
+});
+
+const LAST_UPDATED_DOC = '# Doc\n\n**Last Updated:** 2000-01-01 00:00 CET\n\nText.\n';
+const MTIME = new Date('2026-01-15T09:30:00Z'); // 10:30 CET in Warsaw
+
+// Known limitation of 0.1.0 (CHANGELOG): without guard.command the gate skips everything, the
+// Last Updated stamp included. 0.1.x is planned to stamp and run docs-check anyway; this test then changes.
+test('0.1.0 limitation: no guard.command does nothing at all, not even the date stamp', (t) => {
+  const p = project(t, { config: { timeZone: 'Europe/Warsaw' }, files: { '_docs/doc.md': LAST_UPDATED_DOC } });
+  p.write('_docs/doc.md', `${LAST_UPDATED_DOC}More.\n`);
+  utimesSync(path.join(p.root, '_docs/doc.md'), MTIME, MTIME);
+
+  const run = p.stop();
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout, '');
+  assert.equal(p.calls().length, 0);
+  assert.match(readFileSync(path.join(p.root, '_docs/doc.md'), 'utf8'), /\*\*Last Updated:\*\* 2000-01-01 00:00 CET/);
+  assert.equal(existsSync(path.join(p.root, STATE)), false);
+  assert.match(p.gateLog()[0], / {2}skipped {2}changed=0 checked=0 {2}ms=\d+ {2}- {2}no-guard-command$/);
+});
+
+test('Last Updated is stamped from the mtime, in the configured zone, and the mtime is kept', (t) => {
+  const p = project(t, { files: { '_docs/doc.md': LAST_UPDATED_DOC } });
+  writeFiles(p.root, {
+    '.claude/honest-docs.json': JSON.stringify({ timeZone: 'Europe/Warsaw', guard: { command: ['node', p.guard] } }),
+  });
+  git(p.root, 'commit', '-q', '-am', 'zone');
+  const doc = path.join(p.root, '_docs/doc.md');
+  p.write('_docs/doc.md', `${LAST_UPDATED_DOC}More.\n`);
+  utimesSync(doc, MTIME, MTIME);
+
+  const run = p.stop();
+  assert.equal(run.status, 0);
+  assert.equal(readFileSync(doc, 'utf8'), '# Doc\n\n**Last Updated:** 2026-01-15 10:30 CET\n\nText.\nMore.\n');
+  assert.equal(statSync(doc).mtimeMs, MTIME.getTime());
+  // verified holds the stamped content, so the next stop does not take the stamp for a new edit.
+  assert.deepEqual(p.state().verified, { '_docs/doc.md': p.hash('_docs/doc.md') });
+  assert.equal(p.stop().stdout, '');
+  assert.equal(p.calls().length, 1);
+});
+
+test('a doc already carrying its stamp is not rewritten', (t) => {
+  const p = project(t, { files: { '_docs/doc.md': LAST_UPDATED_DOC } });
+  writeFiles(p.root, {
+    '.claude/honest-docs.json': JSON.stringify({ timeZone: 'Europe/Warsaw', guard: { command: ['node', p.guard] } }),
+  });
+  git(p.root, 'commit', '-q', '-am', 'zone');
+  const doc = path.join(p.root, '_docs/doc.md');
+  const text = '# Doc\n\n**Last Updated:** 2026-01-15 10:30 CET\n\nNew text.\n';
+  p.write('_docs/doc.md', text);
+  utimesSync(doc, MTIME, MTIME);
+  const before = statSync(doc).ctimeMs;
+
+  p.stop();
+  assert.equal(readFileSync(doc, 'utf8'), text);
+  assert.equal(statSync(doc).ctimeMs, before);
+});
+
+test('stateDir and logDir are not changes, whatever .gitignore says', (t) => {
+  const p = project(t);
+  // The fixture has no .gitignore: both folders show up as untracked in git status.
+  p.write('src/a.ts', 'export const a = 2;\n');
+  p.stop();
+  assert.ok(git(p.root, 'status', '--porcelain', '--untracked-files=all').includes('artifacts/'));
+  assert.deepEqual(p.calls()[0].args, ['--changed', 'src/a.ts']);
+
+  const run = p.stop();
+  assert.equal(run.stdout, '');
+  assert.match(p.gateLog()[1], / {2}skipped {2}changed=1 checked=0 /);
+});
+
+test('custom stateDir and logDir are excluded too', (t) => {
+  const p = project(t);
+  writeFiles(p.root, {
+    '.claude/honest-docs.json': JSON.stringify({ stateDir: 'tmp/state/', logDir: 'tmp/logs', guard: { command: ['node', p.guard] } }),
+  });
+  git(p.root, 'commit', '-q', '-am', 'dirs');
+  p.write('src/a.ts', 'export const a = 2;\n');
+  p.stop();
+  assert.ok(existsSync(path.join(p.root, `tmp/state/honest-docs-${SESSION}.json`)));
+  assert.ok(existsSync(path.join(p.root, `tmp/logs/guard-gate-${SESSION}.log`)));
+  assert.equal(p.stop().stdout, '');
+  assert.equal(p.calls().length, 1);
+});
+
+test('a guard that cannot be started lets the stop through', (t) => {
+  const p = project(t);
+  writeFiles(p.root, { '.claude/honest-docs.json': JSON.stringify({ guard: { command: ['/nonexistent/guard'] } }) });
+  git(p.root, 'commit', '-q', '-am', 'broken guard');
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop();
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout, '');
+  assert.match(p.gateLog()[0], / {2}ran {2}changed=1 checked=1 {2}ms=\d+ {2}error {2}ENOENT$/);
+});
+
+test('outside a git repo the gate passes in silence', (t) => {
+  const p = project(t);
+  writeFiles(p.dir, { '.claude/honest-docs.json': JSON.stringify({ guard: { command: ['node', p.guard] } }) });
+  const run = runHook('stop-gate', { session_id: SESSION }, { root: p.dir });
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout, '');
+  assert.equal(p.calls().length, 0);
+  assert.match(readFileSync(path.join(p.dir, GATE_LOG), 'utf8'), / {2}- {2}no-git\n$/);
+});
+
+// Known limitation of 0.1.0: a broken .claude/honest-docs.json lets the stop through in silence.
+// 0.1.x is planned to report it as a visible systemMessage; this test then changes.
+test('0.1.0 limitation: a broken config lets the stop through in silence', (t) => {
+  const p = project(t);
+  p.write('.claude/honest-docs.json', '{ not json');
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop({ exit: 1, output: FAIL_OUTPUT });
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout, '');
+  assert.equal(run.stderr, '');
+  assert.equal(p.calls().length, 0);
+});
+
+test('an unreadable payload exits 0', (t) => {
+  const p = project(t);
+  const run = runHook('stop-gate', undefined, { root: p.root });
+  assert.equal(run.status, 0);
+  assert.match(readFileSync(path.join(p.root, 'artifacts/logs/guard-gate-unknown.log'), 'utf8'), /skipped .* no-input\n$/);
+});
