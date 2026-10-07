@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // Checks the project's docs against the tree: links, anchors, backticked paths, `npm run` names, the
-// docs index, `covers:` globs and the Last Updated line. Run as `honest-docs-check` (bin/), or by the
-// project's guard through $HONEST_DOCS_SCRIPTS. What it scans and what it accepts as absent comes
-// from .claude/honest-docs.json (core/config.mjs).
+// docs index, `covers:` globs, the Last Updated line and what /honest-docs:init wrote. Run as
+// `honest-docs-check` (bin/), or by the project's guard through $HONEST_DOCS_SCRIPTS. What it scans
+// and what it accepts as absent comes from .claude/honest-docs.json (core/config.mjs).
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { loadConfig, projectRoot, skippedRoots } from '../core/config.mjs';
 import { readCovers } from '../core/doc-covers.mjs';
+import { checkInit } from '../core/init.mjs';
 import { LAST_UPDATED_LINE } from '../core/last-updated.mjs';
 import { logEvent } from '../core/log.mjs';
 
@@ -221,7 +222,10 @@ if (repoFiles) {
   }
 }
 
-const CHECKS = ['links', 'anchors', 'paths', 'scripts', 'index', 'covers', 'updated'];
+// The docs rule stamped with this plugin version, and the current CLAUDE.md fragments.
+for (const { file, message } of checkInit(ROOT, config)) report('init', file, 0, message);
+
+const CHECKS = ['links', 'anchors', 'paths', 'scripts', 'index', 'covers', 'updated', 'init'];
 logEvent(ROOT, 'docs-check', {
   files: docs.length,
   problems: findings.length,

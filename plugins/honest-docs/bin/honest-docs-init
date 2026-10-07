@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Writes the docs rule, the config skeleton and the CLAUDE.md fragments. Run from anywhere inside the project.
+exec node "$(dirname "${BASH_SOURCE[0]}")/../scripts/init.mjs" "$@"

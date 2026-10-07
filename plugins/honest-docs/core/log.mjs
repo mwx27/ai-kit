@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 export const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 let version;
-function pluginVersion() {
+export function pluginVersion() {
   if (version === undefined) {
     try {
       version = JSON.parse(readFileSync(path.join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json'), 'utf8')).version;
