@@ -2,6 +2,9 @@
 config.md
 **/config.md
 
+# Local-only files, never published (translations, notes, journals, test scripts)
+artifacts/
+
 # OS / editor cruft
 .DS_Store
 *.swp
