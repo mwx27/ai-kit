@@ -129,6 +129,18 @@ is back under the gate.
 Two more refusals to block: `permission_mode` `plan` is skipped, and every internal error exits 0.
 A broken gate must never be the reason work cannot be handed back.
 
+**Every internal error is reported, and none blocks**: the stop goes through with a `systemMessage`
+saying the gate checked nothing this turn, since a silent failure would pass for a gate that ran. A
+`.claude/honest-docs.json` that is not valid JSON, or whose top level is not an object, gets a
+precise message naming the file and the error, and reason `config-error` in the event log (the
+gate's own log gets nothing, since its folder comes from the config). So does a `guard` that is not
+an object, or a `guard.command` that is not a non-empty array of strings: read as no guard, it would
+switch the project's checks off unseen, so the message says the expected shape. The other values
+are not validated, and a wrong type there (`"docsDir": 5`) surfaces as a general
+`the Stop gate failed (…)`, logged as `internal-error`. The baseline and the doc reminder stay
+silent on a broken config and only log `config-error`, so the user hears it once per turn;
+`honest-docs-check` exits 2 with one line saying the same.
+
 **Known limitation:** git cannot say who changed a file. A file the user edits in their editor
 mid-session is indistinguishable from one the agent wrote, so the gate can block an agent turn over
 a human's half-finished edit. That is the accepted price of covering the agent's Bash edits, which a

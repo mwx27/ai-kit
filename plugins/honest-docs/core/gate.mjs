@@ -39,7 +39,7 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { changedFiles } from './changed-files.mjs';
-import { loadConfig, ownDirs } from './config.mjs';
+import { ConfigError, loadConfig, ownDirs } from './config.mjs';
 import { stampLastUpdated } from './last-updated.mjs';
 import { PLUGIN_ROOT, logEvent } from './log.mjs';
 import { sessionKey, sessionStore } from './session-state.mjs';
@@ -257,8 +257,21 @@ export function gate(input) {
     return { stdout: JSON.stringify({ systemMessage: ranMessage() }), exitCode: 0 };
   } catch (error) {
     // Every internal failure ends here: a broken gate exits 0. It must never be the reason work
-    // cannot be handed back.
-    audit('skipped', 0, 0, '-', `internal-error: ${error?.message ?? error}`);
-    return { exitCode: 0 };
+    // cannot be handed back, and it must not pass for a gate that ran, so each one is reported. A
+    // config the project broke gets its own message naming the file; its reason in the event log
+    // carries no file content.
+    if (error instanceof ConfigError) {
+      audit('skipped', 0, 0, '-', 'config-error');
+      return {
+        stdout: JSON.stringify({ systemMessage: `honest-docs: ${error.message}. The Stop gate checked nothing this turn.` }),
+        exitCode: 0,
+      };
+    }
+    const detail = error?.message ?? String(error);
+    audit('skipped', 0, 0, '-', `internal-error: ${detail}`);
+    return {
+      stdout: JSON.stringify({ systemMessage: `honest-docs: the Stop gate failed (${detail}) and checked nothing this turn.` }),
+      exitCode: 0,
+    };
   }
 }

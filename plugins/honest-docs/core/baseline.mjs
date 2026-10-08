@@ -9,7 +9,7 @@
 // with the same session id, and re-baselining there would silently mark everything the agent had
 // already broken as fine.
 import { treeSnapshot } from './changed-files.mjs';
-import { loadConfig, ownDirs } from './config.mjs';
+import { ConfigError, loadConfig, ownDirs } from './config.mjs';
 import { logEvent } from './log.mjs';
 import { sessionKey, sessionStore } from './session-state.mjs';
 
@@ -17,7 +17,15 @@ import { sessionKey, sessionStore } from './session-state.mjs';
 export function baseline(input) {
   if (!input) return { exitCode: 0 };
   const root = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
-  const config = loadConfig(root);
+  let config;
+  try {
+    config = loadConfig(root);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    // Silent: the Stop gate reports a broken config, once per turn.
+    logEvent(root, 'baseline', { written: false, source: input.source, reason: 'config-error' });
+    return { exitCode: 0 };
+  }
   const store = sessionStore(root, config, sessionKey(input.session_id));
 
   if (store.read() !== null) {

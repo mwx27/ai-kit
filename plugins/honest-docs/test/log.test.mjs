@@ -106,3 +106,19 @@ test('the hooks and scripts log their events; the instructions log does not', (t
   // Metadata only: no file content or path from the tree in any record.
   assert.doesNotMatch(JSON.stringify(logged), /src\/a\.ts|CLAUDE\.md/);
 });
+
+test('with a broken config the baseline and the reminder say nothing and log config-error', (t) => {
+  const { dir, root } = tmpRepo(t, { '.claude/honest-docs.json': '{ not json', 'src/a.ts': '1\n' });
+  const data = path.join(dir, 'data');
+  const env = { CLAUDE_PLUGIN_DATA: data };
+
+  const runs = [
+    runHook('session-baseline', { session_id: 's', source: 'startup' }, { root, env }),
+    runHook('doc-reminder', { session_id: 's', tool_name: 'Edit' }, { root, env }),
+  ];
+  for (const run of runs) assert.deepEqual([run.status, run.stdout, run.stderr], [0, '', '']);
+  assert.deepEqual(events(data).map((e) => [e.event, e.reason]), [
+    ['baseline', 'config-error'],
+    ['reminder', 'config-error'],
+  ]);
+});

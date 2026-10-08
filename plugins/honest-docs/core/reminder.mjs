@@ -5,7 +5,7 @@
 // file whose hash moved since the last check counts as changed — deleted included. A changed doc
 // goes quiet for the rest of the session; so does a doc once reminded. It reminds and never blocks.
 import { treeSnapshot } from './changed-files.mjs';
-import { loadConfig, ownDirs } from './config.mjs';
+import { ConfigError, loadConfig, ownDirs } from './config.mjs';
 import { isDoc, readCovers } from './doc-covers.mjs';
 import { logEvent } from './log.mjs';
 import { sessionKey, sessionStore } from './session-state.mjs';
@@ -38,7 +38,15 @@ function message(due, current) {
 export function reminder(input) {
   if (!input) return { exitCode: 0 };
   const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-  const config = loadConfig(root);
+  let config;
+  try {
+    config = loadConfig(root);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    // Silent: the Stop gate reports a broken config, once per turn.
+    logEvent(root, 'reminder', { reason: 'config-error' });
+    return { exitCode: 0 };
+  }
   const store = sessionStore(root, config, sessionKey(input.session_id));
 
   const state = store.read();

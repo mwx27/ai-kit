@@ -18,11 +18,24 @@
 //                   docs-check passes; with none the Stop gate runs docs-check alone
 //   instructionsLog true turns on the instructions log (a measurement, off by default)
 //   docsAudit       what /docs-audit treats as library, native and prebuild folders
+//
+// A file that is not valid JSON, or whose top level is not an object, throws a ConfigError; what
+// each caller does with it is in references/hooks.md. Of the values inside only `guard` is
+// validated, because a malformed one would switch the project's guard off in silence; a missing or
+// null `guard` or `guard.command` means no guard.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 export const CONFIG_FILE = '.claude/honest-docs.json';
+
+/** A config file the project has but the plugin cannot use. The message starts with the file name. */
+export class ConfigError extends Error {
+  constructor(detail) {
+    super(`${CONFIG_FILE}: ${detail}`);
+    this.name = 'ConfigError';
+  }
+}
 
 const DEFAULTS = {
   docsDir: '_docs',
@@ -47,11 +60,24 @@ const DEFAULTS = {
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const trimSlash = (p) => p.replace(/\/+$/, '');
 
-/** The config, defaults filled in. Throws on a file that is there but is not a JSON object. */
+/** The config, defaults filled in. Throws a ConfigError on a file that is there but unusable. */
 export function loadConfig(root) {
   const file = path.join(root, CONFIG_FILE);
-  const own = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
-  if (!isObject(own)) throw new Error(`${CONFIG_FILE} is not a JSON object`);
+  let own = {};
+  if (existsSync(file)) {
+    try {
+      own = JSON.parse(readFileSync(file, 'utf8'));
+    } catch (error) {
+      throw new ConfigError(`not valid JSON (${error.message})`);
+    }
+  }
+  if (!isObject(own)) throw new ConfigError('not a JSON object');
+  if (own.guard != null) {
+    if (!isObject(own.guard)) throw new ConfigError('guard must be an object, like { "command": [...] }');
+    const { command } = own.guard;
+    if (command != null && !(Array.isArray(command) && command.length > 0 && command.every((a) => typeof a === 'string')))
+      throw new ConfigError('guard.command must be an array of strings, like ["bash", "scripts/guard.sh"]');
+  }
 
   const config = {};
   for (const [key, value] of Object.entries(DEFAULTS)) {

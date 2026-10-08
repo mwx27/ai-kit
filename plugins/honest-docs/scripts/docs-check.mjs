@@ -7,14 +7,21 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { loadConfig, projectRoot, skippedRoots } from '../core/config.mjs';
+import { ConfigError, loadConfig, projectRoot, skippedRoots } from '../core/config.mjs';
 import { readCovers } from '../core/doc-covers.mjs';
 import { checkInit } from '../core/init.mjs';
 import { LAST_UPDATED_LINE } from '../core/last-updated.mjs';
 import { logEvent } from '../core/log.mjs';
 
 const ROOT = projectRoot();
-const config = loadConfig(ROOT);
+let config;
+try {
+  config = loadConfig(ROOT);
+} catch (error) {
+  if (!(error instanceof ConfigError)) throw error;
+  console.error(`docs-check: ${error.message}`);
+  process.exit(2);
+}
 const DOCS_DIR = config.docsDir;
 
 /**

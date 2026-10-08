@@ -55,11 +55,11 @@ function project(t, { config, files = {}, guard: guardKind = 'plain' } = {}) {
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'config');
 
-  const stop = ({ exit = 0, output = '', payload = {} } = {}) => {
+  const stop = ({ exit = 0, output = '', payload = {}, env = {} } = {}) => {
     const run = runHook(
       'stop-gate',
       { session_id: SESSION, cwd: root, hook_event_name: 'Stop', permission_mode: 'default', stop_hook_active: false, ...payload },
-      { root, env: { GUARD_RECORD: record, GUARD_EXIT: String(exit), GUARD_OUTPUT: output } }
+      { root, env: { GUARD_RECORD: record, GUARD_EXIT: String(exit), GUARD_OUTPUT: output, ...env } }
     );
     return { ...run, message: run.stdout ? JSON.parse(run.stdout).systemMessage : undefined };
   };
@@ -443,17 +443,61 @@ test('outside a git repo the gate passes in silence', (t) => {
   assert.match(readFileSync(path.join(p.dir, GATE_LOG), 'utf8'), / {2}- {2}no-git\n$/);
 });
 
-// Known limitation of 0.1.0: a broken .claude/honest-docs.json lets the stop through in silence.
-// 0.1.x is planned to report it as a visible systemMessage; this test then changes.
-test('0.1.0 limitation: a broken config lets the stop through in silence', (t) => {
+/** Ends a turn with the event log on, and returns the gate's own events. */
+function stopLogged(p, options = {}) {
+  const data = path.join(p.dir, 'data');
+  const run = p.stop({ ...options, env: { CLAUDE_PLUGIN_DATA: data } });
+  const file = path.join(data, 'events.jsonl');
+  const gateEvents = existsSync(file) ? readLines(file).map((line) => JSON.parse(line)).filter((e) => e.event === 'gate') : [];
+  return { run, gateEvents };
+}
+
+for (const [label, text, detail] of [
+  ['not valid JSON', '{ not json', /not valid JSON \(/],
+  ['not a JSON object', '["node", "guard.mjs"]', /not a JSON object/],
+  ['a string in guard.command', '{ "guard": { "command": "bash scripts/guard.sh" } }', /guard\.command must be an array of strings/],
+  ['an empty guard.command', '{ "guard": { "command": [] } }', /guard\.command must be an array of strings/],
+  ['a number in guard.command', '{ "guard": { "command": ["node", 1] } }', /guard\.command must be an array of strings/],
+  ['a string in guard', '{ "guard": "bash scripts/guard.sh" }', /guard must be an object, like/],
+]) {
+  test(`a config that is ${label}: the stop goes through, and the gate says it checked nothing`, (t) => {
+    const p = project(t);
+    p.write('.claude/honest-docs.json', text);
+    p.write('src/a.ts', 'export const a = 2;\n');
+    const { run, gateEvents } = stopLogged(p, { exit: 1, output: FAIL_OUTPUT });
+
+    assert.equal(run.status, 0);
+    assert.equal(run.stderr, '');
+    assert.match(run.message, /^honest-docs: \.claude\/honest-docs\.json: /);
+    assert.match(run.message, detail);
+    assert.match(run.message, /The Stop gate checked nothing this turn\.$/);
+    assert.equal(p.calls().length, 0);
+    assert.deepEqual(gateEvents.map((e) => [e.outcome, e.reason]), [['-', 'config-error']]);
+  });
+}
+
+for (const config of [{}, { guard: null }, { guard: { command: null } }]) {
+  test(`guard as ${JSON.stringify(config)}: no guard, docs-check alone`, (t) => {
+    const p = project(t, { config });
+    p.write('src/a.ts', 'export const a = 2;\n');
+    const run = p.stop({ exit: 1, output: FAIL_OUTPUT });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.message, /^docs-check: 1 plik, /);
+    assert.equal(p.calls().length, 0);
+    assert.match(p.gateLog()[0], / {2}pass {2}docs-check-only$/);
+  });
+}
+
+test('any other internal error is reported too, without blocking', (t) => {
   const p = project(t);
-  p.write('.claude/honest-docs.json', '{ not json');
+  // Not validated: a number where a path belongs breaks the gate further in, not as a config error.
+  p.write('.claude/honest-docs.json', '{ "docsDir": 5 }');
   p.write('src/a.ts', 'export const a = 2;\n');
-  const run = p.stop({ exit: 1, output: FAIL_OUTPUT });
+  const { run, gateEvents } = stopLogged(p);
   assert.equal(run.status, 0);
-  assert.equal(run.stdout, '');
   assert.equal(run.stderr, '');
-  assert.equal(p.calls().length, 0);
+  assert.match(run.message, /^honest-docs: the Stop gate failed \(.+\) and checked nothing this turn\.$/);
+  assert.match(gateEvents[0].reason, /^internal-error: /);
 });
 
 test('an unreadable payload exits 0', (t) => {

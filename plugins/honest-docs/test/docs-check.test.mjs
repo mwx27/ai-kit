@@ -231,3 +231,20 @@ test('0.1.0 limitation: no CLAUDE.md fails with an error', (t) => {
   assert.match(run.stderr, /ENOENT.*CLAUDE\.md/);
   assert.doesNotMatch(run.stderr, /^docs-check:/m);
 });
+
+for (const [text, detail] of [
+  ['{ not json', 'not valid JSON \\(.+\\)'],
+  ['{ "guard": { "command": "bash scripts/guard.sh" } }', 'guard\\.command must be an array of strings, like .+'],
+  ['{ "guard": { "command": [] } }', 'guard\\.command must be an array of strings, like .+'],
+  ['{ "guard": { "command": ["node", 1] } }', 'guard\\.command must be an array of strings, like .+'],
+  ['{ "guard": "bash scripts/guard.sh" }', 'guard must be an object, like .+'],
+]) {
+  test(`a broken config (${text}): exit 2 with one line naming the file, no stack trace`, (t) => {
+    const { root } = cleanProject(t);
+    writeFiles(root, { '.claude/honest-docs.json': text });
+    const run = check(root);
+    assert.equal(run.status, 2);
+    assert.equal(run.stdout, '');
+    assert.match(run.stderr, new RegExp(`^docs-check: \\.claude/honest-docs\\.json: ${detail}\\n$`));
+  });
+}
