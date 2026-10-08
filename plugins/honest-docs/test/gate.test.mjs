@@ -80,7 +80,7 @@ test('pass: the guard gets the changed files, the gate records them as verified'
   const run = p.stop();
   assert.equal(run.status, 0);
   assert.equal(run.stderr, '');
-  assert.match(run.message, /^docs-check, guard --changed: 1 plik, \d+\.\ds$/);
+  assert.match(run.message, /^docs-check, guard --changed: 1 file, \d+\.\ds$/);
 
   const [call] = p.calls();
   assert.deepEqual(call.args, ['--changed', 'src/a.ts']);
@@ -111,7 +111,7 @@ test('pass: the message agrees with the number of files', (t) => {
   const p = project(t);
   p.write('src/a.ts', 'export const a = 2;\n');
   p.write('src/b.ts', 'export const b = 2;\n');
-  assert.match(p.stop().message, /^docs-check, guard --changed: 2 pliki, /);
+  assert.match(p.stop().message, /^docs-check, guard --changed: 2 files, /);
 });
 
 test('a clean tree runs nothing', (t) => {
@@ -138,7 +138,7 @@ test('fail with GUARD_FAIL check=docs from the guard: blocks and points at hones
       '      _docs/x.md:3  no such file: y.md\n' +
       'Fix it and stop again. To reproduce: honest-docs-check\n'
   );
-  assert.match(run.message, /^docs-check, guard --changed: 1 plik, /);
+  assert.match(run.message, /^docs-check, guard --changed: 1 file, /);
   assert.equal(p.state().failure.check, 'docs');
   assert.equal(p.state().failure.repeats, 1);
   assert.deepEqual(p.state().verified, {});
@@ -186,7 +186,7 @@ test('the third identical failure lets the stop through and records gaveUp', (t)
   assert.match(
     third.message,
     new RegExp(
-      `^docs-check, guard --changed: 1 plik, \\d+\\.\\ds - eslint still fails after 3 identical attempts, letting the stop through\\. ` +
+      `^docs-check, guard --changed: 1 file, \\d+\\.\\ds - eslint still fails after 3 identical attempts, letting the stop through\\. ` +
         `Nothing was fixed; run \`node ${p.guard}\` to see it\\.$`
     )
   );
@@ -270,7 +270,7 @@ test('no guard.command: a broken link in the docs blocks a code-only change, as 
   assert.match(run.stderr, /^Guard gate: docs failed on 1 changed file\(s\)\.\n {2}src\/a\.ts\n/);
   assert.match(run.stderr, /_docs\/doc\.md:5 {2}no such file: gone\.md\n/);
   assert.ok(run.stderr.endsWith('Fix it and stop again. To reproduce: honest-docs-check\n'), run.stderr);
-  assert.match(run.message, /^docs-check: 1 plik, \d+\.\ds$/);
+  assert.match(run.message, /^docs-check: 1 file, \d+\.\ds$/);
   assert.equal(p.state().failure.check, 'docs');
   assert.deepEqual(p.state().verified, {});
   assert.match(p.gateLog()[0], / {2}ran {2}changed=1 checked=1 {2}ms=\d+ {2}fail {2}docs$/);
@@ -283,7 +283,7 @@ test('no guard.command: the third identical docs failure gives up and points at 
   assert.equal(p.stop().status, 2);
   const run = p.stop();
   assert.equal(run.status, 0);
-  assert.match(run.message, /^docs-check: 1 plik, \d+\.\ds - docs still fails after 3 identical attempts, .*run `honest-docs-check` to see it\.$/);
+  assert.match(run.message, /^docs-check: 1 file, \d+\.\ds - docs still fails after 3 identical attempts, .*run `honest-docs-check` to see it\.$/);
   assert.deepEqual(p.state().gaveUp, { 'src/a.ts': p.hash('src/a.ts') });
 });
 
@@ -296,7 +296,7 @@ test('no guard.command: clean docs pass, the doc is stamped and verified', (t) =
   const run = p.stop();
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stderr, '');
-  assert.match(run.message, /^docs-check: 1 plik, \d+\.\ds$/);
+  assert.match(run.message, /^docs-check: 1 file, \d+\.\ds$/);
   assert.equal(readFileSync(doc, 'utf8'), '# Doc\n\n**Last Updated:** 2026-01-15 10:30 CET\n\nText.\nMore.\n');
   assert.deepEqual(p.state().verified, { '_docs/doc.md': p.hash('_docs/doc.md') });
   assert.equal(p.calls().length, 0);
@@ -310,7 +310,7 @@ test('with guard.command: docs-check fails first, so the guard never runs', (t) 
   const run = p.stop({ exit: 1, output: FAIL_OUTPUT });
   assert.equal(run.status, 2);
   assert.match(run.stderr, /^Guard gate: docs failed on 1 changed file\(s\)\./);
-  assert.match(run.message, /^docs-check: 1 plik, /);
+  assert.match(run.message, /^docs-check: 1 file, /);
   assert.equal(p.calls().length, 0);
   assert.equal(p.state().failure.check, 'docs');
 });
@@ -321,7 +321,7 @@ test('with guard.command: docs pass and the guard fails, so it blocks with the g
   const run = p.stop({ exit: 1, output: FAIL_OUTPUT });
   assert.equal(run.status, 2);
   assert.match(run.stderr, /^Guard gate: eslint failed on 1 changed file\(s\)\./);
-  assert.match(run.message, /^docs-check, guard --changed: 1 plik, /);
+  assert.match(run.message, /^docs-check, guard --changed: 1 file, /);
   assert.equal(p.calls().length, 1);
   assert.match(p.gateLog()[0], / {2}fail {2}eslint$/);
 });
@@ -333,7 +333,7 @@ test('old path: a guard that runs docs-check itself passes on clean docs', (t) =
   p.write('src/a.ts', 'export const a = 2;\n');
   const run = p.stop();
   assert.equal(run.status, 0, run.stderr);
-  assert.match(run.message, /^docs-check, guard --changed: 1 plik, /);
+  assert.match(run.message, /^docs-check, guard --changed: 1 file, /);
   assert.deepEqual(p.calls()[0].args, ['--changed', 'src/a.ts']);
   assert.deepEqual(p.state().verified, { 'src/a.ts': p.hash('src/a.ts') });
   assert.match(p.gateLog()[0], / {2}pass$/);
@@ -482,7 +482,7 @@ for (const config of [{}, { guard: null }, { guard: { command: null } }]) {
     p.write('src/a.ts', 'export const a = 2;\n');
     const run = p.stop({ exit: 1, output: FAIL_OUTPUT });
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.message, /^docs-check: 1 plik, /);
+    assert.match(run.message, /^docs-check: 1 file, /);
     assert.equal(p.calls().length, 0);
     assert.match(p.gateLog()[0], / {2}pass {2}docs-check-only$/);
   });

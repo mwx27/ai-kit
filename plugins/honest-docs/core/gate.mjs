@@ -84,12 +84,8 @@ function errorDetails(output) {
     .join('\n');
 }
 
-/** 1 plik / 2 pliki / 5 plików — the message is read by a person, so it agrees with the number. */
-function plural(count) {
-  if (count === 1) return 'plik';
-  const rest = count % 100;
-  return rest > 11 && rest < 15 ? 'plików' : [2, 3, 4].includes(count % 10) ? 'pliki' : 'plików';
-}
+/** 1 file / 2 files — the message is read by a person, so it agrees with the number. */
+const plural = (count) => (count === 1 ? 'file' : 'files');
 
 function fileList(files) {
   const shown = files.slice(0, LISTED_FILES).map((file) => `  ${file}`);

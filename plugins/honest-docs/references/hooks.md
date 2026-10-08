@@ -153,7 +153,7 @@ started count, because the rest were baselined.
 **No `statusMessage` in `hooks/hooks.json`** — it is shown while the hook runs _(documented)_, so on
 every Stop, including the turns where
 the hook exits in a millisecond because nothing changed. The gate is silent when it costs nothing
-and prints one line naming what ran, like `docs-check, guard --changed: 3 pliki, 2.4s`, only when it
+and prints one line naming what ran, like `docs-check, guard --changed: 3 files, 2.4s`, only when it
 actually ran; silence is the signal.
 
 Every invocation that can read the config appends one line to `<logDir>/guard-gate-<session>.log` —
