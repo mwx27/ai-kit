@@ -1,12 +1,13 @@
 // honest-docs-init (scripts/init.mjs → core/init.mjs): the first run, a second run, a fragment
 // rewrapped by hand and a fragment whose words changed.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
-import { renderDocsRule } from '../core/init.mjs';
-import { PLUGIN_VERSION, fragment, runBin, tmpRepo, writeDocsRule } from './helpers.mjs';
+import { fragmentVersions, renderDocsRule } from '../core/init.mjs';
+import { PLUGIN_VERSION, fragment, fragmentVersion, runBin, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const HEAD = '# Project\n\n## CRITICAL\n\n- Keep it short.\n- ';
 const MIDDLE = '\n\n## Docs\n\n';
@@ -35,7 +36,7 @@ test('first run: writes the rule, the config skeleton and the current fragments'
       'honest-docs-init: wrote CLAUDE.md',
       CHECK_NOTE,
       NO_GUARD,
-      `honest-docs-init: docs-policy: pre-0.1.0 → ${PLUGIN_VERSION}`,
+      `honest-docs-init: docs-policy: pre-0.1.0 → ${fragmentVersion('docs-policy')}`,
       '',
     ].join('\n')
   );
@@ -123,7 +124,7 @@ test('a fragment found twice: exit 1, nothing written', (t) => {
   const run = init(root);
   assert.equal(run.status, 1);
   assert.ok(
-    run.stderr.startsWith(`honest-docs-init: read-line: found 2 times in CLAUDE.md (${PLUGIN_VERSION}, ${PLUGIN_VERSION})\n`),
+    run.stderr.startsWith(`honest-docs-init: read-line: found 2 times in CLAUDE.md (${fragmentVersion('read-line')}, ${fragmentVersion('read-line')})\n`),
     run.stderr
   );
   assert.equal(existsSync(path.join(root, '.claude')), false);
@@ -142,8 +143,8 @@ test('init leaves a tree that docs-check passes on the init category', (t) => {
   init(root);
   const run = runBin('honest-docs-check', [], { cwd: root });
   assert.doesNotMatch(run.stderr, /^ {2}init \(/m);
-  // Writing the file by hand afterwards with another stamp is what docs-check flags.
-  writeFileSync(path.join(root, '.claude/rules/docs.md'), read(root, '.claude/rules/docs.md').replace(PLUGIN_VERSION, '0.0.1'));
+  // Changing its text by hand afterwards is what docs-check flags.
+  writeFileSync(path.join(root, '.claude/rules/docs.md'), read(root, '.claude/rules/docs.md').replace('One fact, one home', 'One fact'));
   assert.match(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}init \(1\)$/m);
 });
 
@@ -208,4 +209,36 @@ test('a broken config: exit 2 with one line naming the file, nothing written', (
   assert.match(run.stderr, /^honest-docs-init: \.claude\/honest-docs\.json: not valid JSON \(.+\)\n$/);
   assert.equal(read(root, 'CLAUDE.md'), before());
   assert.equal(existsSync(path.join(root, '.claude/rules/docs.md')), false);
+});
+
+/** A fragment folder holding `versions`, each file's text its own version name. */
+function fragmentDir(t, versions) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'honest-docs-fragments-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFiles(dir, Object.fromEntries(versions.map((v) => [`${v}.md`, v])));
+  return dir;
+}
+
+const versionsOf = (versions) => versions.map((v) => v.version);
+
+test('fragment versions: the current one is the newest not above the plugin version', (t) => {
+  const dir = fragmentDir(t, ['pre-0.1.0', '0.1.0']);
+  assert.deepEqual(versionsOf(fragmentVersions('x', '0.1.1', dir)), ['0.1.0', 'pre-0.1.0']);
+  // The plugin's own templates: 0.1.1 changed no fragment, so 0.1.0 is current.
+  assert.equal(fragmentVersions('docs-policy', '0.1.1')[0].version, '0.1.0');
+});
+
+test('fragment versions: compared as numbers, not text', (t) => {
+  const dir = fragmentDir(t, ['0.1.9', '0.1.10', '0.2.0']);
+  assert.deepEqual(versionsOf(fragmentVersions('x', '0.1.10', dir)), ['0.1.10', '0.1.9']);
+});
+
+test('fragment versions: one above the plugin version is ignored, not even recognised', (t) => {
+  const dir = fragmentDir(t, ['0.1.0', '0.2.0']);
+  assert.deepEqual(versionsOf(fragmentVersions('x', '0.1.1', dir)), ['0.1.0']);
+});
+
+test('fragment versions: pre-<v> is never current, and with nothing else it is an error', (t) => {
+  const dir = fragmentDir(t, ['pre-0.1.0', '0.2.0']);
+  assert.throws(() => fragmentVersions('x', '0.1.1', dir), /templates\/fragments\/x\/ has no version at or below 0\.1\.1/);
 });

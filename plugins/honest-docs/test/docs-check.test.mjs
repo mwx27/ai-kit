@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
 import { renderDocsRule } from '../core/init.mjs';
-import { PLUGIN_VERSION, fragment, runBin, tmpRepo, writeFiles } from './helpers.mjs';
+import { PLUGIN_VERSION, fragment, fragmentVersion, runBin, tmpRepo, writeFiles } from './helpers.mjs';
 
 const CHECKS = ['links', 'anchors', 'paths', 'scripts', 'index', 'covers', 'updated', 'init'];
 
@@ -173,20 +173,34 @@ test('updated: a folder listed in undated is exempt', (t) => {
   assert.equal(check(root).status, 0);
 });
 
-test('init: docs.md stamped by another plugin version', (t) => {
+test('init: docs.md stamped by another plugin version, with the current text, passes', (t) => {
   const { root } = cleanProject(t);
   edit(root, '.claude/rules/docs.md', (text) => text.replace(`init ${PLUGIN_VERSION} —`, 'init 0.0.9 —'));
-  assertOnly(
-    check(root),
-    'init',
-    `.claude/rules/docs.md  written by 0.0.9, the plugin is ${PLUGIN_VERSION} — run /honest-docs:init`
-  );
+  const run = check(root);
+  assert.equal(run.status, 0, run.stderr);
 });
 
-test('init: docs.md without a stamp', (t) => {
+test('init: docs.md rewrapped by a formatter, same words, passes', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, '.claude/rules/docs.md', (text) => {
+    const lines = text.trimEnd().split('\n');
+    const body = lines.slice(0, -1).join('\n').replace(/one home\*\* — everywhere/, 'one home**\n—   everywhere');
+    return `${body.replace(/\n(?=[a-z])/g, ' ')}\n${lines.at(-1)}\n`;
+  });
+  const run = check(root);
+  assert.equal(run.status, 0, run.stderr);
+});
+
+test('init: docs.md with a changed text and the current stamp', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, '.claude/rules/docs.md', (text) => text.replace('One fact, one home', 'One fact, two homes'));
+  assertOnly(check(root), 'init', '.claude/rules/docs.md  differs from the rule this plugin writes — run /honest-docs:init');
+});
+
+test('init: docs.md with a line added after the stamp', (t) => {
   const { root } = cleanProject(t);
   edit(root, '.claude/rules/docs.md', (text) => `${text}\nA line added by hand.\n`);
-  assertOnly(check(root), 'init', '.claude/rules/docs.md  no /honest-docs:init stamp on the last line — run /honest-docs:init');
+  assertOnly(check(root), 'init', '.claude/rules/docs.md  differs from the rule this plugin writes — run /honest-docs:init');
 });
 
 test('init: docs.md missing', (t) => {
@@ -201,7 +215,7 @@ test('init: docs.md missing', (t) => {
 test('init: a CLAUDE.md fragment missing', (t) => {
   const { root } = cleanProject(t);
   edit(root, 'CLAUDE.md', (text) => text.replace(fragment('read-line'), 'Read files however you like.'));
-  assertOnly(check(root), 'init', `CLAUDE.md  no ${PLUGIN_VERSION} read-line fragment — run /honest-docs:init`);
+  assertOnly(check(root), 'init', `CLAUDE.md  no ${fragmentVersion('read-line')} read-line fragment — run /honest-docs:init`);
 });
 
 test('init: an older version of a fragment counts as missing', (t) => {
@@ -209,7 +223,7 @@ test('init: an older version of a fragment counts as missing', (t) => {
   edit(root, 'CLAUDE.md', (text) => text.replace(fragment('docs-policy'), fragment('docs-policy', 'pre-0.1.0')));
   const run = check(root);
   assert.equal(run.status, 1);
-  assert.ok(run.stderr.includes(`\n    CLAUDE.md  no ${PLUGIN_VERSION} docs-policy fragment — run /honest-docs:init\n`));
+  assert.ok(run.stderr.includes(`\n    CLAUDE.md  no ${fragmentVersion('docs-policy')} docs-policy fragment — run /honest-docs:init\n`));
 });
 
 test('scripts: without package.json every npm run a doc names is a problem', (t) => {

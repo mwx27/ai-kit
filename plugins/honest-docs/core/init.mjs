@@ -2,15 +2,18 @@
 //
 //   .claude/rules/docs.md   templates/docs.md with the config's docsDir and index.file filled in;
 //                           the plugin is its only author, so it is overwritten, and its last line
-//                           stamps the plugin version
+//                           stamps the plugin version. The check compares the rest of the text, not
+//                           the stamp, so an update that leaves the rule alone does not fail it
 //   .claude/honest-docs.json  a skeleton, written only when the project has none
 //   index.file (CLAUDE.md)  two fragments — the `Read` line and the docs policy — each replaced
 //                           where it stands by its current version; the rest of the file is the
 //                           project's
 //
 // A fragment is found by the words of any version in templates/fragments/<name>/, whitespace
-// between them free, so a rewrap by hand or by Prettier still matches. A version named pre-<v> is
-// text that predates the plugin: recognised and replaced, never written.
+// between them free, so a rewrap by hand or by Prettier still matches. The current version is the
+// newest <v>.md not above the plugin's version, so a release that leaves a fragment alone adds no
+// file; one above the plugin's version is ignored. A version named pre-<v> is text that predates the
+// plugin: recognised and replaced, never current, never written.
 //
 // On the first run — no docs.md, or one without a stamp — a fragment found nowhere is appended to
 // the end of index.file under one `## honest-docs` heading, read-line first. The project may move
@@ -31,18 +34,30 @@ const SKELETON = { docsDir: '_docs', guard: { command: null } };
 
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** Every version of a fragment, `{ version, text }`, the current one first. */
-function fragmentVersions(name) {
-  const dir = path.join(TEMPLATES, 'fragments', name);
+/** x.y.z → [x, y, z], or null for anything else (pre-<v> included). */
+const semver = (version) => version.match(/^(\d+)\.(\d+)\.(\d+)$/)?.slice(1).map(Number) ?? null;
+const compareSemver = (a, b) => a.reduce((diff, n, i) => diff || n - b[i], 0);
+
+/**
+ * Every version of a fragment the plugin at `version` knows, `{ version, text }`, the current one
+ * first: the newest <v>.md not above `version`. `dir` is for tests.
+ */
+export function fragmentVersions(name, version = pluginVersion(), dir = path.join(TEMPLATES, 'fragments', name)) {
+  const plugin = semver(version);
   const versions = readdirSync(dir)
     .filter((f) => f.endsWith('.md'))
-    .map((f) => ({ version: f.slice(0, -3), text: readFileSync(path.join(dir, f), 'utf8').trim() }));
-  const current = versions.find((v) => v.version === pluginVersion());
-  if (!current) throw new Error(`templates/fragments/${name}/ has no ${pluginVersion()}.md`);
+    .map((f) => ({ version: f.slice(0, -3), text: readFileSync(path.join(dir, f), 'utf8').trim() }))
+    .filter((v) => !semver(v.version) || compareSemver(semver(v.version), plugin) <= 0);
+  const [current] = versions
+    .filter((v) => semver(v.version))
+    .sort((a, b) => compareSemver(semver(b.version), semver(a.version)));
+  if (!current) throw new Error(`templates/fragments/${name}/ has no version at or below ${version}`);
   return [current, ...versions.filter((v) => v !== current)];
 }
 
-const wordsPattern = (text) => new RegExp(`(?<!\\S)${text.split(/\s+/).map(escapeRe).join('\\s+')}(?!\\S)`, 'g');
+/** The words of a text, whatever whitespace separates them: how a fragment and the rule are compared. */
+const words = (text) => text.trim().split(/\s+/);
+const wordsPattern = (text) => new RegExp(`(?<!\\S)${words(text).map(escapeRe).join('\\s+')}(?!\\S)`, 'g');
 
 /**
  * Where a fragment sits in `text`: every match of any of `versions`, a match lying inside a longer
@@ -144,18 +159,24 @@ export function runInit(root, config) {
   return plan;
 }
 
-/** What docs-check reports as `init`: `{ file, message }` per problem. */
+/**
+ * A docs.md without its last line, the stamp, as words: what the check compares, so a project
+ * formatter rewrapping the rule does not fail it.
+ */
+const ruleWords = (text) => words(text.trimEnd().split('\n').slice(0, -1).join('\n')).join(' ');
+
+/**
+ * What docs-check reports as `init`: `{ file, message }` per problem. It compares text, not version
+ * numbers, so a plugin update that changes neither the rule nor a fragment reports nothing.
+ */
 export function checkInit(root, config) {
   const problems = [];
   const rerun = 'run /honest-docs:init';
   const rulePath = path.join(root, DOCS_RULE);
   if (!existsSync(rulePath)) {
     problems.push({ file: DOCS_RULE, message: `missing — ${rerun}` });
-  } else {
-    const stamp = stampOf(readFileSync(rulePath, 'utf8'));
-    if (stamp === null) problems.push({ file: DOCS_RULE, message: `no /honest-docs:init stamp on the last line — ${rerun}` });
-    else if (stamp !== pluginVersion())
-      problems.push({ file: DOCS_RULE, message: `written by ${stamp}, the plugin is ${pluginVersion()} — ${rerun}` });
+  } else if (ruleWords(readFileSync(rulePath, 'utf8')) !== ruleWords(renderDocsRule(config))) {
+    problems.push({ file: DOCS_RULE, message: `differs from the rule this plugin writes — ${rerun}` });
   }
 
   const indexFile = config.index.file;

@@ -24,7 +24,7 @@ as pointers, and a rule linked only there is still missing from the index.
 | `index`   | the docs index in the index file (`index.file`, `CLAUDE.md` by default) and the `index.groups` folders under the docs folder (`features` and `tools`) agree, both ways; so do its Rules section (`index.rulesHeading`, `Rules`) and `.claude/rules/` |
 | `covers`  | every glob in a doc's `covers:` frontmatter matches a file on disk that git tracks or would track, and the key holds one                                                                                                                         |
 | `updated` | every page in the docs folder outside the `undated` folders (none by default) has exactly one line starting with `**Last Updated:**`                                                                                                             |
-| `init`    | `.claude/rules/docs.md` exists and its last line is the `/honest-docs:init` stamp with the plugin's version; the index file holds the current version of each fragment `/honest-docs:init` writes — the `Read` line and the docs policy — exactly once |
+| `init`    | `.claude/rules/docs.md` exists and, its last line aside, reads as `/honest-docs:init` would write it now; the index file holds the current version of each fragment `/honest-docs:init` writes — the `Read` line and the docs policy — exactly once |
 
 `updated` exists because the gate only rewrites a date line that is already there
 ([`hooks.md`](hooks.md#last-updated-stamps)), and the docs rule asking for one did not load when a
@@ -32,10 +32,14 @@ doc was created with `Write` _(observed, September 2026; the Claude Code documen
 loads it)_. Without the check a new doc would stay undated for good.
 
 `init` exists because the plugin is updated outside the project, and what it wrote into the project
-is not. The stamp must name the version in the plugin's `plugin.json`, and a fragment counts as
-current when its words appear in order with any whitespace between them, so a rewrap passes and a
-changed word does not. Every problem it reports, except a fragment present twice, says to run
-`/honest-docs:init`.
+is not. It compares text, never version numbers: the rule's last line, the stamp naming the plugin
+version that wrote it, is left out of the comparison, so an update that changes neither the rule nor
+a fragment reports nothing. Whitespace is ignored in the rule as in the fragments, so the project's
+formatter may rewrap it. A fragment's current version is the newest file in
+`<plugin_root>/templates/fragments/<name>/` not above the plugin's version, and it counts as present
+when its words appear in order with any whitespace between them, so a rewrap passes and a changed
+word does not. Every problem it reports names the rule or the fragment that differs, and all but a
+fragment present twice say to run `/honest-docs:init`.
 
 `covers` asks git for tracked plus untracked-but-not-ignored files, so a doc written with a feature
 not yet added passes, and drops what is gone from disk, so a doc outliving its deleted code fails

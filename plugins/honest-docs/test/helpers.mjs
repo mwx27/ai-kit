@@ -8,15 +8,21 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../core/config.mjs';
-import { renderDocsRule } from '../core/init.mjs';
+import { fragmentVersions, renderDocsRule } from '../core/init.mjs';
 
 export const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PLUGIN_VERSION = JSON.parse(
   readFileSync(path.join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json'), 'utf8')
 ).version;
 
-export const fragment = (name, version = PLUGIN_VERSION) =>
-  readFileSync(path.join(PLUGIN_ROOT, 'templates', 'fragments', name, `${version}.md`), 'utf8').trim();
+/** A fragment's text: the given version, or without one the current version, as /init picks it. */
+export const fragment = (name, version) =>
+  version === undefined
+    ? fragmentVersions(name)[0].text
+    : readFileSync(path.join(PLUGIN_ROOT, 'templates', 'fragments', name, `${version}.md`), 'utf8').trim();
+
+/** The version /init writes of a fragment. */
+export const fragmentVersion = (name) => fragmentVersions(name)[0].version;
 
 /**
  * The parent environment without anything from the Claude Code session running the tests, or from a
