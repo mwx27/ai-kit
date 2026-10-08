@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.1.4] — 2026-10-08
+
+### Changed
+
+- **Tool docs and modules the user never sees open with what they are for too.** The docs rule's opening paragraph covers a feature or tool doc; for a module with no user-facing behaviour it says what the module does for the rest of the app. A second example shows one.
+- **A rule tied to file paths now also loads when Claude creates a matching file — but only after the file is written.** Observed in October 2026; in September only reading a file loaded one. The plugin's reference docs say so, and draw the consequence: what a new file needs at its first write belongs in `CLAUDE.md` or a skill, not in such a rule.
+- 0.1.4 changes the text of the docs rule: after updating, run `/honest-docs:init`.
+
+---
+
 ## [0.1.3] — 2026-10-08
 
 ### Fixed

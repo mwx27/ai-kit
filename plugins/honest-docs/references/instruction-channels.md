@@ -3,8 +3,8 @@
 How instructions reach the model, why the plugin exists, and the decisions it rests on.
 
 What this page says about Claude Code itself is marked: _(documented)_ where the Claude Code
-documentation states it, _(observed, September 2026)_ where it comes from sessions watched then. An
-unmarked sentence about Claude Code follows from the marked ones.
+documentation states it, _(observed, September 2026)_ or _(observed, October 2026)_ where it comes
+from sessions watched then. An unmarked sentence about Claude Code follows from the marked ones.
 
 ## When each kind loads
 
@@ -12,18 +12,20 @@ The channels differ in _when_ they enter context, and every trap below follows f
 
 - **`CLAUDE.md`** — every session, and it survives compaction: Claude Code re-reads it from disk
   _(documented)_. A text instruction that has to reach every session has no other channel.
-- **`.claude/rules/*.md` with a `paths:` glob** — when Claude uses the `Read`, `Write` or `Edit`
-  tool on a matching file _(documented)_. Bash is not among them: `cat` on the same file fires
-  nothing _(observed, September 2026)_. In the sessions watched then, only `Read` loaded a rule, and
-  neither `Write` nor `Edit` of a matching file did _(observed, September 2026, against the
-  documentation)_. One more route was seen once: when a file the session edited changes on disk
-  behind it — the formatter rewriting it — the client re-reads it (`edited_text_file`) and the
-  file's rule arrives on the next turn _(observed, September 2026)_. That is late by construction
-  and can put a line in the log that no read of the agent's produced. **An agent that opens files
-  through Bash never fires the channel**, however many matching files it reads, and the miss is
-  reported nowhere. A kind of file with no analogue anywhere in the repo stays outside every read;
-  that case is logically open and has never been observed. A rule opened by name is a case of its
-  own ([`instructions-log.md`](instructions-log.md)).
+- **`.claude/rules/*.md` with a `paths:` glob** — when Claude uses the `Read`, `Write` or `Edit` tool
+  on a matching file _(documented)_. A `Write` loads it with the tool's result, once the file is
+  written _(observed, October 2026)_, so a rule reaches a new file's first write only if a file in
+  its scope was read before. In the sessions watched in September only `Read` loaded a rule
+  _(observed, September 2026, on an earlier client)_; `Edit` has not been watched since, and it
+  always follows a `Read` of its file. Bash is not among them: `cat` on the same file fires nothing
+  _(observed, September 2026)_. One more route was seen once: when a file the session edited changes
+  on disk behind it — the formatter rewriting it — the client re-reads it (`edited_text_file`) and
+  the file's rule arrives on the next turn _(observed, September 2026)_. That is late by
+  construction and can put a line in the log that no read of the agent's produced. **An agent that
+  opens files through Bash never fires the channel**, however many matching files it reads, and the
+  miss is reported nowhere. A kind of file with no analogue anywhere in the repo stays outside every
+  read; that case is logically open and has never been observed. A rule opened by name is a case of
+  its own ([`instructions-log.md`](instructions-log.md)).
 - **Skills** — a skill the model may invoke loads when its `description` in the frontmatter matches
   the task, and one with `disable-model-invocation` loads only when the user types its `/name`
   _(documented)_; both of this plugin's skills, `/honest-docs:docs-audit` and `/honest-docs:init`,
@@ -84,6 +86,12 @@ with it.
 agent also changes files through Bash (`printf >>`, `sed -i`, `patch`), which a `PostToolUse` hook
 on Edit|Write never sees — so a tool-call record's picture of the turn is partial, and a gate fed
 from it waves through exactly the turns that did their work that way.
+
+**What a new file needs at its first write does not belong in a path-scoped rule.** The rule
+arrives after that write ([above](#when-each-kind-loads)), so where a file goes, what it is called
+and the shape it starts with belong in `CLAUDE.md` or in a skill invoked before the work. A
+path-scoped rule carries what applies once code in its scope exists: changing it, and every write
+after the first.
 
 **Measurement precedes removing an instruction, not building a safeguard.** Where the cost is
 asymmetric you build first and measure later, if at all; it is taking something away that has to be

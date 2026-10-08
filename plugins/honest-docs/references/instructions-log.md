@@ -41,13 +41,14 @@ is anything under `node_modules/`, `.git/` or the top folder of `stateDir` and `
 The log is raw and append-only — no deduplication, no aggregation. Counting unique files, or
 reloads after a compaction, is the reporting step's job, and it needs every line to do it.
 
-**The questions it exists to answer.** In the sessions watched in September 2026, a rule in
-`.claude/rules/` with a `paths:` glob loaded only when a matching file was _read_ _(observed; the
-documentation says `Write` and `Edit` load it too)_. A session that writes a new file may never read one first — so a rule can
-miss the moment it was written for, silently. Both events in one time-ordered file turn that into a
-readable fact: whether the rule's line sits above the session's first write line, or below it, or
-nowhere. The second question is whether a skill entered the session at all, and by which route —
-the Skill tool, a typed slash command or a `Read` of its file.
+**The questions it exists to answer.** A rule in `.claude/rules/` with a `paths:` glob loads on a
+`Read` of a matching file and, with the tool's result, on a `Write` of one _(observed, October 2026;
+in September 2026 only `Read` did)_. A session that writes a new file without reading anything in
+the rule's scope first gets the rule only after that write — it misses the moment it was written
+for, silently. Both events in one time-ordered file turn that into a readable fact: whether the
+rule's line sits above the session's first write line, or below it, or nowhere. The second question
+is whether a skill entered the session at all, and by which route — the Skill tool, a typed slash
+command or a `Read` of its file.
 
 ```bash
 bash <plugin_root>/scripts/check-instructions-log.sh <log> "<expected set>"

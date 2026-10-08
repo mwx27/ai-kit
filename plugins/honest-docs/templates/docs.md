@@ -34,12 +34,13 @@ keeping: a flow that can't be read off one file, a trap someone will hit twice, 
 obvious alternative is wrong. **Tool docs** (`{{docsDir}}/tools/{tool}.md`) do the same for a standalone
 module like the logger server.
 
-**A feature doc opens with what the feature is for** — one short paragraph for someone who does not
-know the app: what it does for the user and why it has this shape; a flow adds its steps as the
-user sees them, one line each. Keep only what survives a redesign of the screen: no UI copy, no
-values, no layout. For example: _an order can be cancelled only until the courier collects it,
-because after that the shop has already paid for delivery; from then on the app offers a return
-instead._
+**A feature or tool doc opens with what it is for** — one short paragraph for someone who does not
+know the app: what it does for the user, or, for a module the user never sees, for the rest of the
+app, and why it has this shape; a flow adds its steps as the user sees them, one line each. Keep
+only what survives a redesign: no UI copy, no values, no layout. For example: _an order can be
+cancelled only until the courier collects it, because after that the shop has already paid for
+delivery; from then on the app offers a return instead._ Or, for a module: _every request to the
+backend goes through one client, so sign-in, retries and the shape of an error are handled once._
 
 **Then traps and gotchas first** in a doc past roughly 100 lines. A doc is read under time pressure
 and often not to the end; the sections that justify its existence go at the top, above layout or

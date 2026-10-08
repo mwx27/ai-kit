@@ -27,9 +27,9 @@ as pointers, and a rule linked only there is still missing from the index.
 | `init`    | `.claude/rules/docs.md` exists and, its last line aside, reads as `/honest-docs:init` would write it now; the index file holds the current version of each fragment `/honest-docs:init` writes — the `Read` line and the docs policy — exactly once |
 
 `updated` exists because the gate only rewrites a date line that is already there
-([`hooks.md`](hooks.md#last-updated-stamps)), and the docs rule asking for one did not load when a
-doc was created with `Write` _(observed, September 2026; the Claude Code documentation says `Write`
-loads it)_. Without the check a new doc would stay undated for good.
+([`hooks.md`](hooks.md#last-updated-stamps)), and the docs rule asking for one reaches a new doc
+only after `Write` has created it _(observed, October 2026)_. Without the check a new doc could
+stay undated for good.
 
 `init` exists because the plugin is updated outside the project, and what it wrote into the project
 is not. It compares text, never version numbers: the rule's last line, the stamp naming the plugin
