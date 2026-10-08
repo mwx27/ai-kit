@@ -6,6 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.1.3] — 2026-10-08
+
+### Fixed
+
+- **The docs rule's example no longer says something false.** It said a phone never offers to fill in a code that arrives by email; since iOS 17 it does, from Apple Mail. The example is now a made-up feature that claims nothing about any platform.
+- 0.1.3 changes the text of the docs rule: after updating, run `/honest-docs:init`.
+
+---
+
 ## [0.1.2] — 2026-10-08
 
 ### Changed
