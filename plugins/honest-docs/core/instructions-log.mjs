@@ -30,7 +30,8 @@
 // <logDir>/instructions-*.log, one file per session.
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { loadConfig, skippedRoots } from './config.mjs';
+import { ConfigError, loadConfig, skippedRoots } from './config.mjs';
+import { logEvent } from './log.mjs';
 
 const SKILLS_DIR = '.claude/skills/';
 
@@ -82,7 +83,15 @@ function lineBody(input, root, ignoredRoots) {
 export function instructionsLog(input) {
   if (!input) return { exitCode: 0 };
   const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-  const config = loadConfig(root);
+  let config;
+  try {
+    config = loadConfig(root);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    // Silent: the Stop gate reports a broken config, once per turn.
+    logEvent(root, 'instructions-log', { reason: 'config-error' });
+    return { exitCode: 0 };
+  }
   if (config.instructionsLog !== true) return { exitCode: 0 };
 
   const body = lineBody(input, root, skippedRoots(config));

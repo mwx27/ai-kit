@@ -86,4 +86,4 @@ The plugin calls it with `--changed` and the changed files, after `honest-docs-c
 
 The plugin keeps its working files in `artifacts/claude-hooks/` and `artifacts/logs/` in the project; add `artifacts/` to `.gitignore`, or move them with `stateDir` and `logDir`.
 
-**Limitations.** `honest-docs-check` needs a `package.json` and a `CLAUDE.md` in the project, and the end-of-turn check cannot tell your own mid-session edits from the agent's. Changes are in [`CHANGELOG.md`](plugins/honest-docs/CHANGELOG.md).
+**Limitations.** The end-of-turn check cannot tell your own mid-session edits from the agent's. Changes are in [`CHANGELOG.md`](plugins/honest-docs/CHANGELOG.md).

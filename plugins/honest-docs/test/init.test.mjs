@@ -199,3 +199,13 @@ test('first run with one fragment already there: only the missing one is appende
   assert.ok(run.stdout.endsWith(`${APPENDED('docs-policy')}\n`), run.stdout);
   assert.equal(read(root, 'CLAUDE.md'), `${text}\n## honest-docs\n\n${fragment('docs-policy')}\n`);
 });
+
+test('a broken config: exit 2 with one line naming the file, nothing written', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': before(), '.claude/honest-docs.json': '{ not json' });
+  const run = init(root);
+  assert.equal(run.status, 2);
+  assert.equal(run.stdout, '');
+  assert.match(run.stderr, /^honest-docs-init: \.claude\/honest-docs\.json: not valid JSON \(.+\)\n$/);
+  assert.equal(read(root, 'CLAUDE.md'), before());
+  assert.equal(existsSync(path.join(root, '.claude/rules/docs.md')), false);
+});

@@ -137,9 +137,10 @@ gate's own log gets nothing, since its folder comes from the config). So does a 
 an object, or a `guard.command` that is not a non-empty array of strings: read as no guard, it would
 switch the project's checks off unseen, so the message says the expected shape. The other values
 are not validated, and a wrong type there (`"docsDir": 5`) surfaces as a general
-`the Stop gate failed (…)`, logged as `internal-error`. The baseline and the doc reminder stay
-silent on a broken config and only log `config-error`, so the user hears it once per turn;
-`honest-docs-check` exits 2 with one line saying the same.
+`the Stop gate failed (…)`, logged as `internal-error`. The baseline, the doc reminder and the
+instruction log stay silent on a broken config and only log `config-error`, so the user hears it
+once per turn; `honest-docs-check`, `honest-docs-grep` and `honest-docs-init` exit 2 with one line
+saying the same.
 
 **Known limitation:** git cannot say who changed a file. A file the user edits in their editor
 mid-session is indistinguishable from one the agent wrote, so the gate can block an agent turn over

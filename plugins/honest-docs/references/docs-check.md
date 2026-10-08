@@ -46,6 +46,11 @@ without git only the matching is skipped, with one line of output. The globs are
 by the same `<plugin_root>/core/doc-covers.mjs` as the doc reminder
 ([`hooks.md`](hooks.md#doc-remindermjs--posttooluse-on-editwritebash)).
 
+A project without `package.json` gets every `npm run` its docs name reported under `scripts`, as
+`no package.json`, and nothing when they name none. Without the index file, `index` reports that
+file as not found and nothing else, `init` reports its fragments missing, and the other checks run
+as usual. A symlink to nothing in a scanned folder is reported under `links`.
+
 ## The two lists in the config
 
 `absentByDesign` holds paths a doc may name that a clean checkout does not have: generated, vendored
@@ -80,6 +85,3 @@ examples are indistinguishable from real keys, and a check that cries wolf gets 
 It verifies that references resolve, never that a sentence is true: a doc claiming a filter matches
 on message text when the code uses a predicate passes every check here. Semantic drift needs a
 reader — a person, or an agent running `/honest-docs:docs-audit`.
-
-**Known limitation:** it reads `package.json` and the index file without checking they exist. In a
-project missing either it stops with a Node error and reports nothing.

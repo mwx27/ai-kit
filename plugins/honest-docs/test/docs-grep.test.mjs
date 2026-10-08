@@ -73,3 +73,12 @@ test('no symbol: usage on stderr, exit 64', (t) => {
   assert.equal(run.stdout, '');
   assert.equal(run.stderr, 'usage: honest-docs-grep <symbol> [<symbol>...]\n');
 });
+
+test('a broken config: exit 2 with one line naming the file, no stack trace', (t) => {
+  const { root } = project(t);
+  writeFiles(root, { '.claude/honest-docs.json': '{ "guard": "bash scripts/guard.sh" }' });
+  const run = grep(root, 'fetchUser');
+  assert.equal(run.status, 2);
+  assert.equal(run.stdout, '');
+  assert.equal(run.stderr, 'docs-grep: .claude/honest-docs.json: guard must be an object, like { "command": [...] }\n');
+});

@@ -1,7 +1,7 @@
 // honest-docs-check (scripts/docs-check.mjs): a clean tree passes, and each of the eight categories
 // fails on its own when one thing in an otherwise clean tree is broken.
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
@@ -212,24 +212,38 @@ test('init: an older version of a fragment counts as missing', (t) => {
   assert.ok(run.stderr.includes(`\n    CLAUDE.md  no ${PLUGIN_VERSION} docs-policy fragment — run /honest-docs:init\n`));
 });
 
-// Known limitation of 0.1.0 (CHANGELOG): docs-check needs package.json and CLAUDE.md and fails with
-// an uncaught error without either. 0.1.x is planned to make it cope; these tests then change.
-test('0.1.0 limitation: no package.json fails with an error', (t) => {
+test('scripts: without package.json every npm run a doc names is a problem', (t) => {
   const { root } = cleanProject(t);
   rmSync(path.join(root, 'package.json'));
-  const run = check(root);
-  assert.equal(run.status, 1);
-  assert.match(run.stderr, /ENOENT.*package\.json/);
-  assert.doesNotMatch(run.stderr, /^docs-check:/m);
+  assertOnly(check(root), 'scripts', '_docs/features/alpha.md:10  no npm script: test — no package.json');
 });
 
-test('0.1.0 limitation: no CLAUDE.md fails with an error', (t) => {
+test('without package.json and no npm run in the docs, nothing is reported', (t) => {
+  const { root } = cleanProject(t);
+  rmSync(path.join(root, 'package.json'));
+  edit(root, '_docs/features/alpha.md', (text) => text.replace(' and `npm run test`', ''));
+  const run = check(root);
+  assert.equal(run.status, 0, run.stderr);
+});
+
+test('index: no CLAUDE.md is one problem, and the other checks still run', (t) => {
   const { root } = cleanProject(t);
   rmSync(path.join(root, 'CLAUDE.md'));
+  edit(root, '_docs/features/alpha.md', (text) => `${text}\nSee [gone](../gone.md).\n`);
   const run = check(root);
   assert.equal(run.status, 1);
-  assert.match(run.stderr, /ENOENT.*CLAUDE\.md/);
-  assert.doesNotMatch(run.stderr, /^docs-check:/m);
+  assert.match(run.stderr, /^  index \(1\)\n    CLAUDE\.md  not found$/m);
+  assert.ok(run.stderr.includes('\n    _docs/features/alpha.md:12  no such file: ../gone.md\n'), run.stderr);
+  // The fragments /init writes into CLAUDE.md are missing too.
+  assert.match(run.stderr, /^  init \(2\)$/m);
+  assert.doesNotMatch(run.stderr, /ENOENT|\n    at /);
+});
+
+test('links: a symlink to nothing in a scanned folder', (t) => {
+  const { root } = cleanProject(t);
+  mkdirSync(path.join(root, '.claude/skills'));
+  symlinkSync(path.join(root, 'nowhere'), path.join(root, '.claude/skills/gone'));
+  assertOnly(check(root), 'links', '.claude/skills/gone  symlink to a file that does not exist');
 });
 
 for (const [text, detail] of [

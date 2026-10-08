@@ -9,15 +9,22 @@
 // Usage:  honest-docs-grep <symbol> [<symbol>...]
 //
 // Matching is a literal, case-sensitive substring test, line by line. Exit 0 whether or not
-// anything matched; 64 on a usage error, 1 when git is unavailable.
+// anything matched; 64 on a usage error, 1 when git is unavailable, 2 on a broken config.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadConfig, projectRoot } from '../core/config.mjs';
+import { ConfigError, loadConfig, projectRoot } from '../core/config.mjs';
 import { logEvent } from '../core/log.mjs';
 
 const ROOT = projectRoot();
-const config = loadConfig(ROOT);
+let config;
+try {
+  config = loadConfig(ROOT);
+} catch (error) {
+  if (!(error instanceof ConfigError)) throw error;
+  console.error(`docs-grep: ${error.message}`);
+  process.exit(2);
+}
 
 const DIRS = config.scan.dirs.map((dir) => `${dir.replace(/\/+$/, '')}/`);
 const ROOT_FILES = config.scan.files;

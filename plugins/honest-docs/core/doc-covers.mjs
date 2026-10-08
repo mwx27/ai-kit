@@ -57,6 +57,7 @@ function coversOf(text) {
 function markdownFiles(dir) {
   return readdirSync(dir).flatMap((entry) => {
     const full = path.join(dir, entry);
+    if (!existsSync(full)) return []; // a symlink to nothing; docs-check reports it under `links`
     if (statSync(full).isDirectory()) return markdownFiles(full);
     return entry.endsWith('.md') ? [full] : [];
   });

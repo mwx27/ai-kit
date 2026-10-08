@@ -78,3 +78,13 @@ test('on: what the log leaves out', (t) => {
   p.send({ hook_event_name: 'InstructionsLoaded' });
   assert.deepEqual(p.lines(), []);
 });
+
+test('a broken config: silent exit 0, nothing written, config-error in the event log', (t) => {
+  const { dir, root } = tmpRepo(t, { '.claude/honest-docs.json': '{ not json' });
+  const data = path.join(dir, 'data');
+  const run = runHook('instructions-log', { session_id: SESSION, ...events(root)[0] }, { root, env: { CLAUDE_PLUGIN_DATA: data } });
+  assert.deepEqual([run.status, run.stdout, run.stderr], [0, '', '']);
+  assert.equal(existsSync(path.join(root, 'artifacts')), false);
+  const logged = readLines(path.join(data, 'events.jsonl')).map((line) => JSON.parse(line));
+  assert.deepEqual(logged.map((e) => [e.event, e.reason]), [['instructions-log', 'config-error']]);
+});

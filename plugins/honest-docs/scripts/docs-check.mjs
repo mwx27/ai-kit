@@ -51,6 +51,11 @@ function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
     if (SKIPPED.includes(entry)) continue;
     const full = join(dir, entry);
+    // A symlink to nothing would stop the run at statSync.
+    if (!existsSync(full)) {
+      report('links', relative(ROOT, full), 0, 'symlink to a file that does not exist');
+      continue;
+    }
     if (statSync(full).isDirectory()) walk(full, out);
     else if (entry.endsWith('.md')) out.push(full);
   }
@@ -88,7 +93,8 @@ const headings = new Map(
   ])
 );
 
-const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+// Not every project has one; then every `npm run` a doc names is reported, and none is no problem.
+const pkg = existsSync(join(ROOT, 'package.json')) ? JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) : null;
 const trimSlash = (p) => p.replace(/\/$/, '');
 const isAbsentByDesign = (p) =>
   ABSENT_BY_DESIGN.map(trimSlash).some((a) => trimSlash(p) === a || trimSlash(p).startsWith(`${a}/`));
@@ -154,8 +160,8 @@ for (const doc of docs) {
 
     for (const m of text.matchAll(/npm run ([a-z0-9:_-]+)(\*?)/g)) {
       const [, name, glob] = m;
-      if (glob || ABSENT_SCRIPTS.includes(name) || pkg.scripts?.[name]) continue;
-      report('scripts', rel, line, `no npm script: ${name}`);
+      if (glob || ABSENT_SCRIPTS.includes(name) || pkg?.scripts?.[name]) continue;
+      report('scripts', rel, line, pkg ? `no npm script: ${name}` : `no npm script: ${name} — no package.json`);
     }
   });
 }
@@ -163,39 +169,44 @@ for (const doc of docs) {
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const { file: INDEX_FILE, groups: INDEX_GROUPS, rulesHeading: RULES_HEADING } = config.index;
 
-const claudeMd = readFileSync(join(ROOT, INDEX_FILE), 'utf8');
-const indexPattern = new RegExp(
-  `${escapeRe(DOCS_DIR)}\\/(?:${INDEX_GROUPS.map(escapeRe).join('|')})\\/[\\w.-]+\\.md`,
-  'g'
-);
-const indexed = new Set(INDEX_GROUPS.length > 0 ? (claudeMd.match(indexPattern) ?? []) : []);
-for (const group of INDEX_GROUPS) {
-  const dir = join(ROOT, DOCS_DIR, group);
-  if (!existsSync(dir)) continue;
-  for (const entry of readdirSync(dir).filter((f) => f.endsWith('.md'))) {
-    if (!indexed.has(`${DOCS_DIR}/${group}/${entry}`))
-      report('index', INDEX_FILE, 0, `page missing from the docs index: ${DOCS_DIR}/${group}/${entry}`);
+// Without the index file there is no index to compare: one problem, and the other checks still run.
+if (!existsSync(join(ROOT, INDEX_FILE))) {
+  report('index', INDEX_FILE, 0, 'not found');
+} else {
+  const claudeMd = readFileSync(join(ROOT, INDEX_FILE), 'utf8');
+  const indexPattern = new RegExp(
+    `${escapeRe(DOCS_DIR)}\\/(?:${INDEX_GROUPS.map(escapeRe).join('|')})\\/[\\w.-]+\\.md`,
+    'g'
+  );
+  const indexed = new Set(INDEX_GROUPS.length > 0 ? (claudeMd.match(indexPattern) ?? []) : []);
+  for (const group of INDEX_GROUPS) {
+    const dir = join(ROOT, DOCS_DIR, group);
+    if (!existsSync(dir)) continue;
+    for (const entry of readdirSync(dir).filter((f) => f.endsWith('.md'))) {
+      if (!indexed.has(`${DOCS_DIR}/${group}/${entry}`))
+        report('index', INDEX_FILE, 0, `page missing from the docs index: ${DOCS_DIR}/${group}/${entry}`);
+    }
   }
-}
-for (const entry of indexed) {
-  if (!existsSync(join(ROOT, entry))) report('index', INDEX_FILE, 0, `docs index lists a page that is gone: ${entry}`);
-}
+  for (const entry of indexed) {
+    if (!existsSync(join(ROOT, entry))) report('index', INDEX_FILE, 0, `docs index lists a page that is gone: ${entry}`);
+  }
 
-// Only the Rules section counts: the index file links a rule from other sections too, and a link
-// there does not put it in the index.
-const rulesSection =
-  claudeMd.match(new RegExp(`^## ${escapeRe(RULES_HEADING)}\\b[\\s\\S]*?(?=^## |(?![\\s\\S]))`, 'm'))?.[0] ?? '';
-const indexedRules = new Set(rulesSection.match(/\.claude\/rules\/[\w.-]+\.md/g) ?? []);
-const rulesDir = join(ROOT, '.claude', 'rules');
-if (existsSync(rulesDir)) {
-  for (const entry of readdirSync(rulesDir).filter((f) => f.endsWith('.md'))) {
-    if (!indexedRules.has(`.claude/rules/${entry}`))
-      report('index', INDEX_FILE, 0, `rule missing from the ${RULES_HEADING} index: .claude/rules/${entry}`);
+  // Only the Rules section counts: the index file links a rule from other sections too, and a link
+  // there does not put it in the index.
+  const rulesSection =
+    claudeMd.match(new RegExp(`^## ${escapeRe(RULES_HEADING)}\\b[\\s\\S]*?(?=^## |(?![\\s\\S]))`, 'm'))?.[0] ?? '';
+  const indexedRules = new Set(rulesSection.match(/\.claude\/rules\/[\w.-]+\.md/g) ?? []);
+  const rulesDir = join(ROOT, '.claude', 'rules');
+  if (existsSync(rulesDir)) {
+    for (const entry of readdirSync(rulesDir).filter((f) => f.endsWith('.md'))) {
+      if (!indexedRules.has(`.claude/rules/${entry}`))
+        report('index', INDEX_FILE, 0, `rule missing from the ${RULES_HEADING} index: .claude/rules/${entry}`);
+    }
   }
-}
-for (const entry of indexedRules) {
-  if (!existsSync(join(ROOT, entry)))
-    report('index', INDEX_FILE, 0, `${RULES_HEADING} index lists a rule that is gone: ${entry}`);
+  for (const entry of indexedRules) {
+    if (!existsSync(join(ROOT, entry)))
+      report('index', INDEX_FILE, 0, `${RULES_HEADING} index lists a rule that is gone: ${entry}`);
+  }
 }
 
 // Reading the globs needs no git, so a key the parser cannot read fails even where git is missing.
