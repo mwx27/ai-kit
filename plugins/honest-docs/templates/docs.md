@@ -29,14 +29,21 @@ the obvious "fix". Re-derivable from the source in a minute → skip it.
 
 ## Shape
 
-**Put traps and gotchas first** in a doc past roughly 100 lines. A doc is read under time pressure
-and often not to the end; the sections that justify its existence go at the top, above layout or
-wire-up.
-
 Add a **per-feature doc** (`{{docsDir}}/features/{feature}.md`) when a feature has non-obvious whys worth
 keeping: a flow that can't be read off one file, a trap someone will hit twice, a decision whose
 obvious alternative is wrong. **Tool docs** (`{{docsDir}}/tools/{tool}.md`) do the same for a standalone
 module like the logger server.
+
+**A feature doc opens with what the feature is for** — one short paragraph for someone who does not
+know the app: what it does for the user and why it has this shape; a flow adds its steps as the
+user sees them, one line each. Keep only what survives a redesign of the screen: no UI copy, no
+values, no layout. For example: _sign-in codes arrive by email, not SMS, so the phone never offers
+to fill them in; the screen watches the clipboard instead, and that is the only reason that code
+exists._
+
+**Then traps and gotchas first** in a doc past roughly 100 lines. A doc is read under time pressure
+and often not to the end; the sections that justify its existence go at the top, above layout or
+wire-up.
 
 A new `features/` or `tools/` doc declares the code it describes as `covers:` in YAML frontmatter —
 globs anchored at the repo root, as narrow as its subject; a doc with no code scope has none.

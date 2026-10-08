@@ -6,6 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.1.2] — 2026-10-08
+
+### Changed
+
+- **A feature doc opens with what the feature is for.** The docs rule asks for one short paragraph for someone who does not know the app — what the feature does for the user and why it has this shape, a flow's steps as the user sees them — and keeps out what a redesign would make false: UI copy, values, layout. Traps and gotchas come after it.
+- 0.1.2 changes the text of the docs rule (`.claude/rules/docs.md`): after updating, run `/honest-docs:init`; until then the Stop gate blocks on `init`.
+
+---
+
 ## [0.1.1] — 2026-10-08
 
 ### Changed
