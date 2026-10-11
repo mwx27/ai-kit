@@ -281,6 +281,83 @@ test('init fails on a fragment: the Rules line is not written either', (t) => {
   assert.equal(read(root, 'CLAUDE.md'), text);
 });
 
+// P2: a docsDir that does not exist.
+
+const missingDocsDir = (folders) =>
+  `honest-docs-init: warning: docsDir "_docs" does not exist, so honest-docs-check scans no docs there; ${folders} ` +
+  'Set docsDir in .claude/honest-docs.json, then run /honest-docs:init again.\n';
+
+test('docsDir missing: a warning naming the folders that hold .md files, exit 0', (t) => {
+  const { root } = tmpRepo(t, {
+    'CLAUDE.md': after(),
+    'README.md': '# Root files are not a folder\n',
+    'docs/index.md': '',
+    'docs/features/a.md': '',
+    'docs/features/b.md': '',
+    'docs/features/notes.txt': '',
+    'node_modules/pkg/README.md': '',
+    'packages/app/node_modules/dep/README.md': '',
+  });
+  const run = init(root);
+  assert.equal(run.status, 0);
+  assert.equal(run.stderr, missingDocsDir('folders holding .md files: docs/features/ (2), docs/ (1).'));
+  assert.ok(existsSync(path.join(root, '.claude/rules/docs.md')), 'init still writes');
+});
+
+test('docsDir missing and no .md folder anywhere', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after() });
+  assert.equal(init(root).stderr, missingDocsDir('no folder holds .md files.'));
+});
+
+test('docsDir missing: at most 10 folders named', (t) => {
+  const files = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`d${String(i).padStart(2, '0')}/a.md`, '']));
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), ...files });
+  const named = Array.from({ length: 10 }, (_, i) => `d${String(i).padStart(2, '0')}/ (1)`).join(', ');
+  assert.equal(init(root).stderr, missingDocsDir(`folders holding .md files: ${named}, and 2 more.`));
+});
+
+test('docsDir there: no warning (old path)', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': '' });
+  const run = init(root);
+  assert.equal(run.status, 0);
+  assert.equal(run.stderr, '');
+});
+
+// P3: files init maintains that git ignores.
+
+test('a file init writes is gitignored: one warning per file, exit 0, still written', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': '', '.gitignore': '# local\n.claude/\n' });
+  const run = init(root);
+  assert.equal(run.status, 0);
+  assert.equal(
+    run.stderr,
+    'honest-docs-init: warning: .claude/rules/docs.md is ignored by git (.gitignore:2:.claude/), so it will not be committed and nobody else gets it.\n' +
+      'honest-docs-init: warning: .claude/honest-docs.json is ignored by git (.gitignore:2:.claude/), so it will not be committed and nobody else gets it.\n'
+  );
+  assert.ok(existsSync(path.join(root, '.claude/rules/docs.md')));
+  // A second run writes nothing and still warns: the files are still not committed.
+  assert.match(init(root).stderr, /docs\.md is ignored by git/);
+});
+
+test('a tracked file matching an ignore pattern, or one a negation re-includes, is not reported', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': '' });
+  // Written after the commit, so CLAUDE.md is tracked though the pattern matches it.
+  writeFiles(root, { '.gitignore': 'CLAUDE.md\n.claude/*\n!.claude/rules/\n!.claude/honest-docs.json\n' });
+  const run = init(root);
+  assert.equal(run.status, 0);
+  assert.equal(run.stderr, '');
+});
+
+test('outside a git repo: no ignore check, no warning', (t) => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'honest-docs-nogit-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFiles(dir, { 'CLAUDE.md': after(), '_docs/a.md': '', '.gitignore': '.claude/\n' });
+  const run = init(dir);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stderr, '');
+  assert.ok(existsSync(path.join(dir, '.claude/rules/docs.md')));
+});
+
 test('a broken config: exit 2 with one line naming the file, nothing written', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': before(), '.claude/honest-docs.json': '{ not json' });
   const run = init(root);

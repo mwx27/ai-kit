@@ -24,6 +24,10 @@
 // section's end, so docs-check's `index` passes. Without that section init creates it, holding the
 // one line, right after the `## honest-docs` section, or at the end of the file when there is none.
 // A section that already lists the rule is left alone.
+//
+// Two things init warns about and does not stop for: a docsDir that does not exist, naming the
+// folders that do hold .md files; and a file it maintains that git ignores, which nobody else gets.
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE } from './config.mjs';
@@ -119,20 +123,83 @@ function withRulesLine(text, config) {
   return text + (text === '' ? '' : text.endsWith('\n') ? '\n' : '\n\n') + block;
 }
 
+const DIR_LIST = 10;
+
+/** Folders under `root` holding .md files directly, most files first, node_modules and .git skipped. */
+function markdownFolders(root) {
+  const counts = new Map();
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(path.join(root, dir), { withFileTypes: true });
+    } catch {
+      return; // unreadable: a hint for the warning is not worth failing init over
+    }
+    for (const entry of entries) {
+      // isDirectory() is false for a symlink, so a link loop is never followed.
+      if (entry.isDirectory() && entry.name !== 'node_modules' && entry.name !== '.git')
+        walk(dir ? `${dir}/${entry.name}` : entry.name);
+      else if (dir && entry.isFile() && entry.name.endsWith('.md')) counts.set(dir, (counts.get(dir) ?? 0) + 1);
+    }
+  };
+  walk('');
+  return [...counts].sort(([a, m], [b, n]) => n - m || a.localeCompare(b));
+}
+
+function missingDocsDirWarning(root, config) {
+  const folders = markdownFolders(root);
+  const shown = folders.slice(0, DIR_LIST).map(([dir, n]) => `${dir}/ (${n})`);
+  if (folders.length > DIR_LIST) shown.push(`and ${folders.length - DIR_LIST} more`);
+  return (
+    `docsDir "${config.docsDir}" does not exist, so honest-docs-check scans no docs there; ` +
+    (shown.length > 0 ? `folders holding .md files: ${shown.join(', ')}. ` : 'no folder holds .md files. ') +
+    `Set docsDir in ${CONFIG_FILE}, then run /honest-docs:init again.`
+  );
+}
+
+/**
+ * The files among `files` git ignores, `{ file, source }` with source `<file>:<line>:<pattern>`.
+ * Empty without git or outside a repo. A tracked file is never reported: git commits it anyway.
+ */
+export function ignoredByGit(root, files) {
+  let output;
+  try {
+    output = execFileSync('git', ['-C', root, 'check-ignore', '-v', '--', ...files], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    // Exit 1 is "none ignored"; anything else (no git, no repo) means no check.
+    return [];
+  }
+  return output
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [source, file] = line.split('\t');
+      return { file, source };
+    })
+    // With -v a negated pattern that matched is printed too, though the file is not ignored.
+    .filter(({ source }) => !/^[^:]*:\d+:!/.test(source));
+}
+
 /** The version stamped in a docs.md, or null when its last line is not a stamp. */
 export function stampOf(text) {
   return text.trimEnd().split('\n').at(-1).match(STAMP)?.[1] ?? null;
 }
 
 /**
- * Plans the writes without making any. Returns `{ writes: [{ file, text }], notes, errors }`: a
- * write for each file whose content changes, and an error for each fragment found twice or more, or
+ * Plans the writes without making any. Returns `{ writes: [{ file, text }], notes, warnings, errors }`:
+ * a write for each file whose content changes, and an error for each fragment found twice or more, or
  * found nowhere after the first run.
  */
 export function planInit(root, config) {
   const writes = [];
   const notes = [];
+  const warnings = [];
   const errors = [];
+
+  if (!existsSync(path.join(root, config.docsDir))) warnings.push(missingDocsDirWarning(root, config));
 
   const rulePath = path.join(root, DOCS_RULE);
   const rule = renderDocsRule(config);
@@ -149,7 +216,7 @@ export function planInit(root, config) {
   const indexPath = path.join(root, indexFile);
   if (!existsSync(indexPath)) {
     errors.push(`${indexFile} not found`);
-    return { writes, notes, errors };
+    return { writes, notes, warnings, errors };
   }
   const original = readFileSync(indexPath, 'utf8');
   let text = original;
@@ -189,18 +256,23 @@ export function planInit(root, config) {
     text = listed;
   }
   if (text !== original) writes.push({ file: indexFile, text });
-  return { writes, notes, errors };
+  return { writes, notes, warnings, errors };
 }
 
-/** Runs planInit and, only when it found no error, makes every write. */
+/**
+ * Runs planInit and, only when it found no error, makes every write; then warns about each file
+ * init maintains that git ignores, written this run or not.
+ */
 export function runInit(root, config) {
   const plan = planInit(root, config);
-  if (plan.errors.length === 0) {
-    for (const { file, text } of plan.writes) {
-      mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-      writeFileSync(path.join(root, file), text);
-    }
+  if (plan.errors.length > 0) return plan;
+  for (const { file, text } of plan.writes) {
+    mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    writeFileSync(path.join(root, file), text);
   }
+  const maintained = [DOCS_RULE, CONFIG_FILE, config.index.file].filter((file) => existsSync(path.join(root, file)));
+  for (const { file, source } of ignoredByGit(root, maintained))
+    plan.warnings.push(`${file} is ignored by git (${source}), so it will not be committed and nobody else gets it.`);
   return plan;
 }
 
