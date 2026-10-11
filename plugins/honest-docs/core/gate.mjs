@@ -15,6 +15,12 @@
 // the same run to run, apart from what normalize() strips. It need not run docs-check; one that
 // still does runs it a second time, which costs time and nothing else.
 //
+// A guard that could not check — its environment is missing something, not the code — exits
+// non-zero and prints `GUARD_ERROR reason=<text>`. The stop goes through, the files are not
+// recorded as verified, so the next stop checks them again, and the user is told why. A
+// `GUARD_FAIL` line in the same output wins: that is a failure and blocks. A non-zero exit with
+// neither line is a failure too.
+//
 // What it runs on: everything git reports as changed, minus what already passed in this exact
 // content (core/session-state.mjs). It deliberately does not read a record of the agent's own
 // Edit and Write calls — the agent also edits through Bash, so a `sed -i` turn slipped through in
@@ -30,10 +36,11 @@
 // edit one of them again and its hash no longer matches, so the gate picks it back up.
 //
 // Every invocation appends one line to <logDir>/guard-gate-<session>.log:
-//   <ISO>  ran|skipped  changed=<n> checked=<n>  ms=<n>  pass|fail|giveup|error|-  [reason]
+//   <ISO>  ran|skipped  changed=<n> checked=<n>  ms=<n>  pass|fail|giveup|unchecked|error|-  [reason]
 // so the question "what does this gate actually cost per turn" is answered by the log, not by
 // an estimate. `ran` means docs-check was started. A pass with no guard configured carries the
-// reason `docs-check-only`. The same outcome goes to the shared event log (core/log.mjs).
+// reason `docs-check-only`; `unchecked` carries the guard's GUARD_ERROR reason, and `error` means
+// a step could not be run at all. The same outcome goes to the shared event log (core/log.mjs).
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
@@ -66,9 +73,18 @@ function normalize(output) {
     .trim();
 }
 
+const GUARD_FAIL = /GUARD_FAIL check=(\S+)/;
+
 /** `GUARD_FAIL check=eslint files=2` — the line the guard prints before it stops. */
 function failedCheck(output) {
-  return output.match(/GUARD_FAIL check=(\S+)/)?.[1] ?? 'guard';
+  return output.match(GUARD_FAIL)?.[1] ?? 'guard';
+}
+
+/** The reason in `GUARD_ERROR reason=<text>`, or null without that line or with GUARD_FAIL beside it. */
+function guardError(output) {
+  if (GUARD_FAIL.test(output)) return null;
+  const reason = normalize(output).match(/^GUARD_ERROR reason=(.*)$/m)?.[1].trim();
+  return reason === undefined ? null : reason || 'no reason given';
 }
 
 function errorDetails(output) {
@@ -239,6 +255,21 @@ export function gate(input) {
       }
       if (run.status !== 0) {
         const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
+        const reason = step.check === null ? guardError(output) : null;
+        if (reason !== null) {
+          // Not a verdict on the files: nothing enters `verified` or the repeat count, and the stop
+          // goes through. The user is told; the agent is not, so it does not set about fixing the
+          // environment.
+          audit('ran', changed.length, files.length, 'unchecked', reason);
+          return {
+            stdout: JSON.stringify({
+              systemMessage:
+                `${ranMessage()} - the guard could not check (${reason}): ` +
+                `${files.length} ${plural(files.length)} unverified, checked again at the next stop.`,
+            }),
+            exitCode: 0,
+          };
+        }
         return block(step.check ?? failedCheck(output), output, ranMessage());
       }
     }

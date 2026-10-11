@@ -71,12 +71,21 @@ turn blocks on docs it never touched.
   root, after docs-check has passed, with `HONEST_DOCS_SCRIPTS` set to the plugin's `scripts/` folder.
 - The guard need not run docs-check. One that still does (`node "$HONEST_DOCS_SCRIPTS/docs-check.mjs"`)
   runs it a second time, which costs a second run and nothing else.
-- Exit 0 passes; any other exit code fails. A guard or docs-check that cannot start, or is killed
-  past its timeout (150 s for the guard, 20 s for docs-check), counts as neither: the gate logs
-  `error` and exits 0.
+- Exit 0 passes; any other exit code fails, unless the guard says it could not check (`GUARD_ERROR`,
+  below). A guard or docs-check that cannot start, or is killed past its timeout (150 s for the
+  guard, 20 s for docs-check), counts as neither: the gate logs `error` and exits 0.
 - A line `GUARD_FAIL check=<name>` in the output names the failed check; without one it is `guard`.
   With `check=docs` the gate's messages tell the agent to run `honest-docs-check`; with any other
   check, the guard command.
+- A guard that could not check — a simulator that is not running, a service that is down, anything
+  wrong with the environment rather than the code — exits non-zero and prints a line
+  `GUARD_ERROR reason=<text>`. The gate lets the stop through and does not record the files as
+  verified, so the next stop checks them again; it logs `unchecked` with the reason and tells the
+  user, in a `systemMessage`, that the guard could not check, why, and how many files are
+  unverified. A `systemMessage` is shown to the user, and Claude hears from a Stop hook that exits 0
+  only through `decision: "block"` or `additionalContext`, which the gate does not send
+  _(documented)_: the agent is not told, so it is not sent to fix the environment. A `GUARD_FAIL`
+  line in the same output wins and the gate blocks; a non-zero exit with neither line is a failure.
 - The agent sees up to 12 non-empty lines of the output: those after a line containing
   `=== Error details ===` (from the start without one), up to a line starting with `GUARD_FAIL`.
 - For one failure, the output must be the same run to run. The gate hashes the file list plus the
@@ -157,8 +166,8 @@ and prints one line naming what ran, like `docs-check, guard --changed: 3 files,
 actually ran; silence is the signal.
 
 Every invocation that can read the config appends one line to `<logDir>/guard-gate-<session>.log` —
-`ran`/`skipped`, `changed=N checked=M`, milliseconds, `pass`/`fail`/`giveup`/`error` (`-` when
-skipped) and the reason — so what the gate costs per turn, and how much of the tree it re-checks, is
+`ran`/`skipped`, `changed=N checked=M`, milliseconds, `pass`/`fail`/`giveup`/`unchecked`/`error`
+(`-` when skipped) and the reason — so what the gate costs per turn, and how much of the tree it re-checks, is
 a measurement rather than an estimate. To run it by hand, feed it the payload it expects:
 
 ```bash

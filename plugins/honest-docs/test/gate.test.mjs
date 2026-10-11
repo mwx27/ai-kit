@@ -245,6 +245,83 @@ test('different failures in the same file keep blocking', (t) => {
   assert.deepEqual(p.state().gaveUp, {});
 });
 
+test('GUARD_ERROR: the stop goes through, the user is told, the files stay unverified', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  p.write('src/b.ts', 'export const b = 2;\n');
+  const run = p.stop({ exit: 1, output: 'booting the simulator\nGUARD_ERROR reason=simulator not running\n' });
+
+  assert.equal(run.status, 0);
+  assert.equal(run.stderr, '');
+  assert.match(
+    run.message,
+    /^docs-check, guard --changed: 2 files, \d+\.\ds - the guard could not check \(simulator not running\): 2 files unverified, checked again at the next stop\.$/
+  );
+  // Nothing is recorded: no state file, so nothing verified and no failure counted.
+  assert.equal(existsSync(path.join(p.root, STATE)), false);
+  assert.match(p.gateLog()[0], / {2}ran {2}changed=2 checked=2 {2}ms=\d+ {2}unchecked {2}simulator not running$/);
+
+  // The next stop checks the same files again, and a pass then records them.
+  assert.equal(p.stop().status, 0);
+  assert.equal(p.calls().length, 2);
+  assert.deepEqual(p.calls()[1].args, ['--changed', 'src/a.ts', 'src/b.ts']);
+  assert.deepEqual(Object.keys(p.state().verified).sort(), ['src/a.ts', 'src/b.ts']);
+});
+
+test('GUARD_ERROR is never a failure: it does not count toward giving up', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  for (let i = 0; i < 4; i++) {
+    const run = p.stop({ exit: 1, output: 'GUARD_ERROR reason=no network\n' });
+    assert.equal(run.status, 0, `stop ${i + 1}`);
+    assert.match(run.message, /1 file unverified/);
+  }
+  assert.equal(p.calls().length, 4);
+  assert.equal(existsSync(path.join(p.root, STATE)), false);
+});
+
+test('GUARD_ERROR after a failure leaves the failure count as it was', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  p.stop({ exit: 1, output: FAIL_OUTPUT });
+  assert.equal(p.stop({ exit: 1, output: 'GUARD_ERROR reason=no network\n' }).status, 0);
+  assert.equal(p.state().failure.repeats, 1);
+  assert.deepEqual(p.state().verified, {});
+});
+
+test('GUARD_ERROR beside GUARD_FAIL: the failure wins and blocks', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop({ exit: 1, output: 'GUARD_ERROR reason=half the checks skipped\nGUARD_FAIL check=tsc\n' });
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /^Guard gate: tsc failed on 1 changed file\(s\)\./);
+  assert.equal(p.state().failure.check, 'tsc');
+  assert.match(p.gateLog()[0], / {2}fail {2}tsc$/);
+});
+
+test('GUARD_ERROR with exit 0 is a pass', (t) => {
+  const p = project(t);
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop({ exit: 0, output: 'GUARD_ERROR reason=ignored\n' });
+  assert.equal(run.status, 0);
+  assert.match(run.message, /^docs-check, guard --changed: 1 file, \d+\.\ds$/);
+  assert.deepEqual(p.state().verified, { 'src/a.ts': p.hash('src/a.ts') });
+});
+
+test('GUARD_ERROR without a reason, and its event log line', (t) => {
+  const p = project(t);
+  const data = path.join(p.dir, 'data');
+  p.write('src/a.ts', 'export const a = 2;\n');
+  const run = p.stop({ exit: 3, output: 'GUARD_ERROR reason=\n', env: { CLAUDE_PLUGIN_DATA: data } });
+  assert.equal(run.status, 0);
+  assert.match(run.message, /could not check \(no reason given\)/);
+  const gate = readLines(path.join(data, 'events.jsonl'))
+    .map((line) => JSON.parse(line))
+    .find((e) => e.event === 'gate');
+  assert.equal(gate.outcome, 'unchecked');
+  assert.equal(gate.reason, 'no reason given');
+});
+
 test('permission_mode=plan: never runs the guard, never blocks', (t) => {
   const p = project(t);
   p.write('src/a.ts', 'export const a = 2;\n');

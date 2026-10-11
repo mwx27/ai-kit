@@ -6,6 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **A project's guard can say it could not check.** A guard that exits non-zero with a line `GUARD_ERROR reason=<text>` no longer blocks the stop: the user is told why, and the files stay unchecked until the next stop. A `GUARD_FAIL` line still blocks.
+
+---
+
 ## [0.1.4] — 2026-10-08
 
 ### Changed
