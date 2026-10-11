@@ -9,7 +9,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { ConfigError, loadConfig, projectRoot, skippedRoots } from '../core/config.mjs';
 import { readCovers } from '../core/doc-covers.mjs';
-import { checkInit } from '../core/init.mjs';
+import { checkInit, listedRules, rulesSection } from '../core/init.mjs';
 import { LAST_UPDATED_LINE } from '../core/last-updated.mjs';
 import { logEvent } from '../core/log.mjs';
 
@@ -209,9 +209,7 @@ if (!existsSync(join(ROOT, INDEX_FILE))) {
 
   // Only the Rules section counts: the index file links a rule from other sections too, and a link
   // there does not put it in the index.
-  const rulesSection =
-    claudeMd.match(new RegExp(`^## ${escapeRe(RULES_HEADING)}\\b[\\s\\S]*?(?=^## |(?![\\s\\S]))`, 'm'))?.[0] ?? '';
-  const indexedRules = new Set(rulesSection.match(/\.claude\/rules\/[\w.-]+\.md/g) ?? []);
+  const indexedRules = listedRules(rulesSection(claudeMd, RULES_HEADING)?.[0] ?? '');
   const rulesDir = join(ROOT, '.claude', 'rules');
   if (existsSync(rulesDir)) {
     for (const entry of readdirSync(rulesDir).filter((f) => f.endsWith('.md'))) {

@@ -10,6 +10,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ### Added
 
+- **`/honest-docs:init` lists the docs rule in `CLAUDE.md`'s Rules section**, so `honest-docs-check` no longer reports it missing from the index right after the first run. Without a Rules section it creates one, after `## honest-docs`.
 - **A project's guard can say it could not check.** A guard that exits non-zero with a line `GUARD_ERROR reason=<text>` no longer blocks the stop: the user is told why, and the files stay unchecked until the next stop. A `GUARD_FAIL` line still blocks.
 
 ### Changed

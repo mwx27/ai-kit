@@ -19,6 +19,11 @@
 // the end of index.file under one `## honest-docs` heading, read-line first. The project may move
 // it anywhere: later runs find it by its words. Once a stamp exists, a fragment found nowhere had
 // its words changed, and that is an error. A fragment found twice is an error on every run.
+//
+// The rule also gets a line in index.file's Rules section (`## <index.rulesHeading>`), at the
+// section's end, so docs-check's `index` passes. Without that section init creates it, holding the
+// one line, right after the `## honest-docs` section, or at the end of the file when there is none.
+// A section that already lists the rule is left alone.
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE } from './config.mjs';
@@ -77,6 +82,41 @@ export function renderDocsRule(config) {
     .replaceAll('{{docsDir}}', config.docsDir)
     .replaceAll('{{indexFile}}', config.index.file)
     .replaceAll('{{version}}', pluginVersion());
+}
+
+/**
+ * The section of `text` headed `## <heading>`, up to the next `## ` heading, as a match (`index`,
+ * `[0]`), or null. docs-check reads the Rules index out of the same section.
+ */
+export const rulesSection = (text, heading) =>
+  text.match(new RegExp(`^## ${escapeRe(heading)}\\b[\\s\\S]*?(?=^## |(?![\\s\\S]))`, 'm'));
+
+/** Every `.claude/rules/<name>.md` a Rules section names. */
+export const listedRules = (section) => new Set(section.match(/\.claude\/rules\/[\w.-]+\.md/g) ?? []);
+
+const rulesLine = (config) => `- [\`docs.md\`](${DOCS_RULE}) — \`${config.docsDir}/\`: what to write and what not to.`;
+
+/** `text` with the docs rule listed in its Rules section, the section created when there is none. */
+function withRulesLine(text, config) {
+  const heading = config.index.rulesHeading;
+  const line = rulesLine(config);
+  const section = rulesSection(text, heading);
+  if (section) {
+    if (listedRules(section[0]).has(DOCS_RULE)) return text;
+    const body = section[0].trimEnd();
+    const end = section.index + body.length;
+    // Straight after a list item it joins the list; after prose it needs a blank line to be one.
+    const gap = /^\s*[-*] /.test(body.split('\n').at(-1)) ? '\n' : '\n\n';
+    return text.slice(0, end) + gap + line + text.slice(end);
+  }
+  const block = `## ${heading}\n\n${line}\n`;
+  const own = text.match(new RegExp(`^${escapeRe(APPEND_HEADING)}[ \\t]*$`, 'm'));
+  const next = own ? text.slice(own.index + own[0].length).search(/^#{1,2} /m) : -1;
+  if (next !== -1) {
+    const at = own.index + own[0].length + next;
+    return `${text.slice(0, at)}${block}\n${text.slice(at)}`;
+  }
+  return text + (text === '' ? '' : text.endsWith('\n') ? '\n' : '\n\n') + block;
 }
 
 /** The version stamped in a docs.md, or null when its last line is not a stamp. */
@@ -142,6 +182,11 @@ export function planInit(root, config) {
       `appended ${missing.map((m) => m.name).join(' and ')} to ${indexFile} under "${APPEND_HEADING}"; ` +
         'move them anywhere in the file, init finds them by their words'
     );
+  }
+  const listed = withRulesLine(text, config);
+  if (listed !== text) {
+    notes.push(`listed ${DOCS_RULE} in the "## ${config.index.rulesHeading}" section of ${indexFile}`);
+    text = listed;
   }
   if (text !== original) writes.push({ file: indexFile, text });
   return { writes, notes, errors };

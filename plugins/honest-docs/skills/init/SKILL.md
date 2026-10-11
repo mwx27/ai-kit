@@ -12,7 +12,8 @@ It writes `.claude/rules/docs.md` (the plugin is its only author: fixes go to th
 to that file), creates `.claude/honest-docs.json` only when the project has none, and replaces
 in `CLAUDE.md` the `Read` line and the docs policy with their current versions, leaving the rest
 of the file as it is. On the first run it appends whichever of the two is missing under a
-`## honest-docs` heading at the end of `CLAUDE.md`. Run it again after every plugin update;
+`## honest-docs` heading at the end of `CLAUDE.md`. It lists the rule in the `CLAUDE.md` Rules
+section, creating one when there is none. Run it again after every plugin update;
 `honest-docs-check` reports `init` when an update changed the rule or a passage, until you do.
 
 After a successful run, format the files it wrote the way the project formats Markdown. If the

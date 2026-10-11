@@ -11,7 +11,8 @@ import { PLUGIN_VERSION, fragment, fragmentVersion, runBin, tmpRepo, writeDocsRu
 
 const HEAD = '# Project\n\n## CRITICAL\n\n- Keep it short.\n- ';
 const MIDDLE = '\n\n## Docs\n\n';
-const TAIL = '\n\nProject line after the policy.\n';
+// The Rules section already lists the rule: init's line for it is the new path, tested on its own.
+const TAIL = '\n\nProject line after the policy.\n\n## Rules\n\n- [docs](.claude/rules/docs.md)\n';
 
 /** A CLAUDE.md as a project has it before its first /init: the pre-0.1.0 docs policy. */
 const claudeMd = (readLine, policy) => `${HEAD}${readLine}${MIDDLE}${policy}${TAIL}`;
@@ -192,13 +193,92 @@ test('fragments moved by hand elsewhere in the file: still no changes', (t) => {
 });
 
 test('first run with one fragment already there: only the missing one is appended', (t) => {
-  const text = `# Project\n\n${fragment('read-line')}\n`;
+  const text = `# Project\n\n${fragment('read-line')}\n\n## Rules\n\n- [docs](.claude/rules/docs.md)\n`;
   const { root } = tmpRepo(t, { 'CLAUDE.md': text });
   const run = init(root);
 
   assert.equal(run.status, 0, run.stderr);
   assert.ok(run.stdout.endsWith(`${APPENDED('docs-policy')}\n`), run.stdout);
   assert.equal(read(root, 'CLAUDE.md'), `${text}\n## honest-docs\n\n${fragment('docs-policy')}\n`);
+});
+
+// P1: the docs rule gets a line in the Rules index.
+
+const RULE_LINE = "- [`docs.md`](.claude/rules/docs.md) — `_docs/`: what to write and what not to.";
+const LISTED = 'honest-docs-init: listed .claude/rules/docs.md in the "## Rules" section of CLAUDE.md';
+const fragments = () => `${fragment('read-line')}\n\n${fragment('docs-policy')}`;
+
+test('Rules section without the rule: the line goes at its end, and a second run adds nothing', (t) => {
+  const text = `# Project\n\n${fragments()}\n\n## Rules (\`.claude/rules/\`)\n\nIntro.\n\n- [x](.claude/rules/x.md)\n\n## Next\n\nText.\n`;
+  const { root } = tmpRepo(t, { 'CLAUDE.md': text, '.claude/rules/x.md': 'x\n', 'package.json': '{}' });
+  const run = init(root);
+
+  assert.equal(run.status, 0, run.stderr);
+  assert.ok(run.stdout.includes(`${LISTED}\n`), run.stdout);
+  assert.equal(read(root, 'CLAUDE.md'), text.replace('- [x](.claude/rules/x.md)\n', `- [x](.claude/rules/x.md)\n${RULE_LINE}\n`));
+  assert.doesNotMatch(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}index \(/m);
+
+  const second = init(root);
+  assert.equal(second.stdout, `honest-docs-init: no changes\n${CHECK_NOTE}\n${NO_GUARD}\n`);
+});
+
+test('Rules section ending in prose: the line is set off by a blank line', (t) => {
+  const text = `# Project\n\n${fragments()}\n\n## Rules\n\nNone yet.\n`;
+  const { root } = tmpRepo(t, { 'CLAUDE.md': text });
+  init(root);
+  assert.equal(read(root, 'CLAUDE.md'), `${text.trimEnd()}\n\n${RULE_LINE}\n`);
+});
+
+test('no Rules section, first run: created right after the appended ## honest-docs', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': '# Project\n\nText.\n', 'package.json': '{}' });
+  const run = init(root);
+
+  assert.equal(run.status, 0, run.stderr);
+  assert.ok(run.stdout.endsWith(`${APPENDED('read-line and docs-policy')}\n${LISTED}\n`), run.stdout);
+  assert.equal(read(root, 'CLAUDE.md'), `# Project\n\nText.\n\n## honest-docs\n\n${fragments()}\n\n## Rules\n\n${RULE_LINE}\n`);
+  assert.doesNotMatch(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}(index|init) \(/m);
+  assert.equal(init(root).stdout, `honest-docs-init: no changes\n${CHECK_NOTE}\n${NO_GUARD}\n`);
+});
+
+test('no Rules section, ## honest-docs followed by another section: created between them', (t) => {
+  const text = `# Project\n\n## honest-docs\n\n${fragments()}\n\n## Later\n\nText.\n`;
+  const { root } = tmpRepo(t, { 'CLAUDE.md': text });
+  init(root);
+  assert.equal(read(root, 'CLAUDE.md'), text.replace('## Later', `## Rules\n\n${RULE_LINE}\n\n## Later`));
+});
+
+test('no Rules section and no ## honest-docs: created at the end of the file', (t) => {
+  const text = `# Project\n\n${fragments()}\n\nLast line.`;
+  const { root } = tmpRepo(t, { 'CLAUDE.md': text });
+  init(root);
+  assert.equal(read(root, 'CLAUDE.md'), `${text}\n\n## Rules\n\n${RULE_LINE}\n`);
+});
+
+test('the Rules line takes docsDir and rulesHeading from the config', (t) => {
+  const text = `# Project\n\n${fragments()}\n\n## Instructions\n\n- [x](.claude/rules/x.md)\n`;
+  const { root } = tmpRepo(t, {
+    'CLAUDE.md': text,
+    'docs/a.md': '# A\n',
+    '.claude/honest-docs.json': JSON.stringify({ docsDir: 'docs', index: { rulesHeading: 'Instructions' } }),
+  });
+  const run = init(root);
+  assert.match(run.stdout, /listed \.claude\/rules\/docs\.md in the "## Instructions" section of CLAUDE\.md/);
+  assert.equal(read(root, 'CLAUDE.md'), `${text}${RULE_LINE.replace('_docs/', 'docs/')}\n`);
+});
+
+test('a rule listed under any other form of link counts as listed: old path, untouched', (t) => {
+  const text = `# Project\n\n${fragments()}\n\n## Rules\n\n- See .claude/rules/docs.md for docs.\n`;
+  const { root } = tmpRepo(t, { 'CLAUDE.md': text });
+  const run = init(root);
+  assert.doesNotMatch(run.stdout, /listed/);
+  assert.equal(read(root, 'CLAUDE.md'), text);
+});
+
+test('init fails on a fragment: the Rules line is not written either', (t) => {
+  const text = `# Project\n\n${fragments()}\n\n${fragment('read-line')}\n`;
+  const { root } = tmpRepo(t, { 'CLAUDE.md': text });
+  assert.equal(init(root).status, 1);
+  assert.equal(read(root, 'CLAUDE.md'), text);
 });
 
 test('a broken config: exit 2 with one line naming the file, nothing written', (t) => {
