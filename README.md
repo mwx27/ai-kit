@@ -74,6 +74,8 @@ Then turn it on in the project's `.claude/settings.json`:
 
 If your install turned it on for every project, set the same entry to `false` in `~/.claude/settings.json`; the project's setting wins. Start a new session in the project and run `/honest-docs:init`. It writes the docs rule, a starter `.claude/honest-docs.json`, two short passages in `CLAUDE.md`, added at the end under `## honest-docs` the first time (move them wherever you like), and a line for the docs rule in the `## Rules` list of `CLAUDE.md`, which it creates if there is none; run it again after every plugin update. It warns when the docs folder it expects does not exist, naming the folders that hold Markdown files, and when git ignores a file it writes.
 
+The docs rule is the plugin's and is rewritten on every run. Rules for docs that only your project needs go in a rule file of your own, which the plugin never touches; [`references/instruction-channels.md`](plugins/honest-docs/references/instruction-channels.md#decisions) says how.
+
 At the end of every turn that changed something, the plugin runs `honest-docs-check` over all the docs and sends the agent back to fix what it finds, so make it report no problems before you turn the plugin on.
 
 **Connect your check script** (optional). To have the same end-of-turn check also run your own checks, name the command in `.claude/honest-docs.json`:

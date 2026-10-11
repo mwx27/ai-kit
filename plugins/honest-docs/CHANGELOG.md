@@ -16,6 +16,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ### Changed
 
+- **The docs rule no longer carries one project's content:** design node ids, the backlog, the logger server and the generated API contract are gone. Rules only your project needs go in a rule file of your own; the README says how.
+- **`/honest-docs:docs-audit` no longer deletes design node ids on sight, nor proposes removing what an API contract answers**, since the docs rule no longer names either; it also reads the project's own docs rule, if there is one.
 - **`honest-docs-check` checks `pnpm run`, `yarn run` and `bun run` as well as `npm run`.** Bare `yarn x` and `pnpm x` are not checked: they can run a dependency's program as well as a script.
 
 ### Fixed

@@ -93,6 +93,13 @@ and the shape it starts with belong in `CLAUDE.md` or in a skill invoked before 
 path-scoped rule carries what applies once code in its scope exists: changing it, and every write
 after the first.
 
+**The docs rule holds only what is true of any project; the rest goes in a rule the project owns.**
+`/honest-docs:init` overwrites `.claude/rules/docs.md` on every run, so what one project wants on top
+of it — its design tool's node ids, a generated API contract, what its backlog may hold — goes in a
+second rule file, say `.claude/rules/docs-project.md`, with the same `paths:` glob
+(`<docsDir>/**/*.md`) so the two load together. The plugin never writes or checks its text;
+docs-check treats it as any other rule, so it needs its own line in the Rules index.
+
 **Measurement precedes removing an instruction, not building a safeguard.** Where the cost is
 asymmetric you build first and measure later, if at all; it is taking something away that has to be
 paid for with evidence.

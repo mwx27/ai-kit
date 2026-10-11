@@ -16,9 +16,7 @@ the obvious "fix". Re-derivable from the source in a minute → skip it.
 - **What a component renders** — prop lists, folder layouts, token values, `package.json` scripts.
 - **Pasted source** — a code block reproducing a file is a second copy that rots on the next edit,
   and the file is one click away.
-- **Design node ids** — the design file is the truth for how a screen looks, and no doc stays in sync
-  with it.
-- Anything the generated API contract or `git log` already answers.
+- Anything `git log` already answers.
 - **Empty shells and roadmaps** — a doc starts at a feature's first non-obvious why, not at its
   folder.
 - **Where the project currently stands** — a `Not implemented yet` / `What's not in scope` /
@@ -32,7 +30,7 @@ the obvious "fix". Re-derivable from the source in a minute → skip it.
 Add a **per-feature doc** (`{{docsDir}}/features/{feature}.md`) when a feature has non-obvious whys worth
 keeping: a flow that can't be read off one file, a trap someone will hit twice, a decision whose
 obvious alternative is wrong. **Tool docs** (`{{docsDir}}/tools/{tool}.md`) do the same for a standalone
-module like the logger server.
+module.
 
 **A feature or tool doc opens with what it is for** — one short paragraph for someone who does not
 know the app: what it does for the user, or, for a module the user never sees, for the rest of the
@@ -60,10 +58,6 @@ dated layers inside the doc (`Correction, <date>`, `Since…`, `Caveat…`).
 
 **In the same change as the code:** a line in the {{indexFile}} docs index for any new
 `{{docsDir}}/features|tools/` file.
-
-**The backlog holds blockers, and only code in this repo** — things to write or delete before
-real users arrive. A third-party dashboard setting, a task for a backend, a note that something is
-unverified: none of those belong, because nobody can clear them by editing this repo.
 
 `honest-docs-check` (run by the guard gate at the end of every turn) verifies every link, anchor,
 path, npm script and `covers:` glob a doc names still resolves, and that every doc in `{{docsDir}}/`

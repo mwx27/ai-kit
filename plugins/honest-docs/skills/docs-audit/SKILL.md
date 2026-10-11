@@ -54,22 +54,21 @@ their lines (`ls`, `find -name`, `wc -l`).
 
 ## Order of work, per doc
 
-1. **The norm first, in `_docs/`.** What the project's `.claude/rules/docs.md` says not to write is
-   the content that goes false first, so it goes whether true or not. Delete at once only what it
-   names as a kind: a prop list, a folder layout, token values, `package.json` scripts, a code
-   block whose lines are copied from a repo file, design node ids, and a section on where the
-   project stands (`Not implemented yet`, `What's not in scope`, a phased roadmap) unless it names
-   what would change each answer. Replace it with a link to the fact's one home if it has one:
-   `Read` the target first and check it states the fact; if it only points on, link where the
-   fact is; if no file states it, it has no home. A target under `node_modules/` is not opened:
-   the home is the library's name. The same holds for the link in table 3.
-   Anything else the norm would remove — a copy of a fact with another home, library basics, what
-   a component renders beyond the kinds above, what the API contract or `git log` answers, an
-   empty shell, whatever is re-derivable from the source — is only proposed. It stays in the doc
-   and still gets a verdict in step 2, like any other claim; a proposed deletion that is F is
-   fixed like any F and keeps its row in table 3. In `.claude/rules/`, `.claude/skills/`,
-   `CLAUDE.md` and `README.md` a restatement of a doc is by design; judge it like any other claim
-   and check it agrees with the doc.
+1. **The norm first, in `_docs/`.** What the project's `.claude/rules/docs.md`, and its own docs
+   rule if it has one, say not to write is the content that goes false first, so it goes whether
+   true or not. Delete at once only what it names as a kind: a prop list, a folder layout, token
+   values, `package.json` scripts, a code block whose lines are copied from a repo file, and a
+   section on where the project stands (`Not implemented yet`, `What's not in scope`, a phased
+   roadmap) unless it names what would change each answer. Replace it with a link to the fact's one
+   home if it has one: `Read` the target first and check it states the fact; if it only points on,
+   link where the fact is; if no file states it, it has no home. A target under `node_modules/` is
+   not opened: the home is the library's name. The same holds for the link in table 3. Anything else
+   the norm would remove — a copy of a fact with another home, library basics, what a component
+   renders beyond the kinds above, what `git log` answers, an empty shell, whatever is re-derivable
+   from the source — is only proposed. It stays in the doc and still gets a verdict in step 2, like
+   any other claim; a proposed deletion that is F is fixed like any F and keeps its row in table 3.
+   In `.claude/rules/`, `.claude/skills/`, `CLAUDE.md` and `README.md` a restatement of a doc is by
+   design; judge it like any other claim and check it agrees with the doc.
 2. **Every remaining claim against the code.** Check every item a claim names, not the first
    few. For a list that reads as complete, find the full set in the code — the array, union,
    switch, the calls — and compare item by item: a missing item leaves nothing to search for.
