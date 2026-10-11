@@ -119,6 +119,27 @@ test('scripts: an npm run name package.json does not have', (t) => {
   assertOnly(check(root), 'scripts', '_docs/features/alpha.md:10  no npm script: nope');
 });
 
+test('paths: an import specifier resolves with an extension or as a folder index', (t) => {
+  const { root } = cleanProject(t);
+  writeFiles(root, {
+    'src/hooks/useThing.tsx': '',
+    'src/lib/index.ts': '',
+    'src/tool.mjs': '',
+    'src/ui/index.jsx': '',
+  });
+  edit(root, '_docs/features/alpha.md', (text) => `${text}\n\`src/alpha\`, \`src/hooks/useThing\`, \`src/lib\`, \`src/tool\`, \`src/ui/\`.\n`);
+  const run = check(root);
+  assert.equal(run.status, 0, run.stderr);
+});
+
+test('paths: a specifier that resolves to nothing is still reported', (t) => {
+  const { root } = cleanProject(t);
+  // A .d.ts or a .json beside it is not one of the extensions tried.
+  writeFiles(root, { 'src/types.d.ts': '', 'src/data.json': '{}' });
+  edit(root, '_docs/features/alpha.md', (text) => `${text}\n\`src/types\`\n`);
+  assertOnly(check(root), 'paths', '_docs/features/alpha.md:12  no such path: src/types');
+});
+
 test('index: a page in _docs/features/ the index does not list', (t) => {
   const { root } = cleanProject(t);
   writeFiles(root, { '_docs/features/gamma.md': BETA.replace('Beta', 'Gamma') });

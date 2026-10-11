@@ -99,6 +99,15 @@ const trimSlash = (p) => p.replace(/\/$/, '');
 const isAbsentByDesign = (p) =>
   ABSENT_BY_DESIGN.map(trimSlash).some((a) => trimSlash(p) === a || trimSlash(p).startsWith(`${a}/`));
 
+/**
+ * `hooks/useAnalytics` in prose is an import specifier: the file is `hooks/useAnalytics.ts`, or a
+ * folder with an index, so the token is tried with each extension and as `<token>/index.<ext>` before
+ * it is reported.
+ */
+const SPECIFIER_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs'];
+const resolvesAsSpecifier = (token) =>
+  SPECIFIER_EXTENSIONS.some((ext) => existsSync(join(ROOT, `${token}${ext}`)) || existsSync(join(ROOT, token, `index${ext}`)));
+
 for (const doc of docs) {
   const rel = relative(ROOT, doc);
   const lines = readFileSync(doc, 'utf8').split('\n');
@@ -154,7 +163,7 @@ for (const doc of docs) {
       // `./config.js`, `../utils`: import specifiers quoted in prose, not repo paths.
       const isRepoPath = token.includes('/') && head !== '.' && head !== '..' && existsSync(join(ROOT, head));
       if (!isRootFile && !isRepoPath) continue;
-      if (existsSync(join(ROOT, token)) || isAbsentByDesign(token)) continue;
+      if (existsSync(join(ROOT, token)) || isAbsentByDesign(token) || resolvesAsSpecifier(token)) continue;
       report('paths', rel, line, `no such path: ${token}`);
     }
 

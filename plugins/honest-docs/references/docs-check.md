@@ -19,7 +19,7 @@ as pointers, and a rule linked only there is still missing from the index.
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `links`   | every relative markdown link resolves to a file                                                                                                                                                                                                  |
 | `anchors` | every `#anchor` into a scanned page matches a heading in that page                                                                                                                                                                               |
-| `paths`   | every backticked repo path exists on disk                                                                                                                                                                                                        |
+| `paths`   | every backticked repo path exists on disk, as written or as a JS/TS import specifier (below)                                                                                                                                                     |
 | `scripts` | every `npm run X` names a script in `package.json`                                                                                                                                                                                               |
 | `index`   | the docs index in the index file (`index.file`, `CLAUDE.md` by default) and the `index.groups` folders under the docs folder (`features` and `tools`) agree, both ways; so do its Rules section (`index.rulesHeading`, `Rules`) and `.claude/rules/` |
 | `covers`  | every glob in a doc's `covers:` frontmatter matches a file on disk that git tracks or would track, and the key holds one                                                                                                                         |
@@ -49,6 +49,10 @@ cannot read would otherwise pass as a doc that covers nothing. That part is a pl
 without git only the matching is skipped, with one line of output. The globs are root-anchored, read
 by the same `<plugin_root>/core/doc-covers.mjs` as the doc reminder
 ([`hooks.md`](hooks.md#doc-remindermjs--posttooluse-on-editwritebash)).
+
+A backticked path that does not exist as written is tried as an import specifier before it is
+reported — with `.ts`, `.tsx`, `.js`, `.jsx` and `.mjs` appended, and as `<path>/index.<ext>` — so
+`hooks/useAnalytics` passes when `hooks/useAnalytics.ts` exists.
 
 A project without `package.json` gets every `npm run` its docs name reported under `scripts`, as
 `no package.json`, and nothing when they name none. Without the index file, `index` reports that

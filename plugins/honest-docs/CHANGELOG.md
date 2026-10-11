@@ -12,6 +12,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 - **A project's guard can say it could not check.** A guard that exits non-zero with a line `GUARD_ERROR reason=<text>` no longer blocks the stop: the user is told why, and the files stay unchecked until the next stop. A `GUARD_FAIL` line still blocks.
 
+### Fixed
+
+- **A path written the way code imports it is not reported as missing:** `hooks/useAnalytics` passes when `hooks/useAnalytics.ts`, or a folder with an `index` file, exists.
+
 ---
 
 ## [0.1.4] — 2026-10-08
