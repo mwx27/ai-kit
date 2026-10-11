@@ -5,8 +5,9 @@ Markdown file the config's `scan` names — by default the docs folder (`docsDir
 `.claude/rules/`, `.claude/skills/`, `CLAUDE.md` and `README.md`: **does everything this text points
 at still exist?** Six checks ask that, a seventh, `updated`, that every doc carries the date line the
 Stop gate rewrites, and an eighth, `init`, that what `/honest-docs:init` wrote is current — file
-reads, regexes and two git calls, no dependencies, well under a second. The Stop gate runs it only
-through the project's guard ([`hooks.md`](hooks.md#the-guard-contract)).
+reads, regexes and two git calls, no dependencies, well under a second. The Stop gate runs it
+itself on every stop with changes to check, before the project's guard, and a failure blocks as
+check `docs` ([`hooks.md`](hooks.md#stop-gatemjs--stop)).
 
 The rule files are in scope for the same reason the docs are: they carry links and paths, they are
 read as instructions, and a rule pointing at a file that moved is worse than a doc doing it — the
