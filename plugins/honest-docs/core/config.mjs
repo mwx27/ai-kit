@@ -8,7 +8,8 @@
 //                   .claude/skills) and root-level `files`
 //   rootFiles       root-level file names docs-check verifies when a doc quotes one in backticks
 //   absentByDesign  paths a doc may name that a clean checkout does not have
-//   absentScripts   `npm run` names a doc mentions while saying they do not exist
+//   absentScripts   script names a doc runs (`npm run`, `pnpm run`, `yarn run`, `bun run`) while
+//                   saying they do not exist
 //   index           the docs index docs-check verifies: `file`, the `groups` under docsDir it must
 //                   list, and the `rulesHeading` of the section that lists .claude/rules/
 //   stateDir        session state of the hooks; excluded from the changed files

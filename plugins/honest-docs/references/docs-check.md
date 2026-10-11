@@ -20,7 +20,7 @@ as pointers, and a rule linked only there is still missing from the index.
 | `links`   | every relative markdown link resolves to a file                                                                                                                                                                                                  |
 | `anchors` | every `#anchor` into a scanned page matches a heading in that page                                                                                                                                                                               |
 | `paths`   | every backticked repo path exists on disk, as written or as a JS/TS import specifier (below)                                                                                                                                                     |
-| `scripts` | every `npm run X` names a script in `package.json`                                                                                                                                                                                               |
+| `scripts` | every `npm run X`, `pnpm run X`, `yarn run X` and `bun run X` names a script in `package.json`                                                                                                                                                   |
 | `index`   | the docs index in the index file (`index.file`, `CLAUDE.md` by default) and the `index.groups` folders under the docs folder (`features` and `tools`) agree, both ways; so do its Rules section (`index.rulesHeading`, `Rules`) and `.claude/rules/` |
 | `covers`  | every glob in a doc's `covers:` frontmatter matches a file on disk that git tracks or would track, and the key holds one                                                                                                                         |
 | `updated` | every page in the docs folder outside the `undated` folders (none by default) has exactly one line starting with `**Last Updated:**`                                                                                                             |
@@ -54,7 +54,12 @@ A backticked path that does not exist as written is tried as an import specifier
 reported — with `.ts`, `.tsx`, `.js`, `.jsx` and `.mjs` appended, and as `<path>/index.<ext>` — so
 `hooks/useAnalytics` passes when `hooks/useAnalytics.ts` exists.
 
-A project without `package.json` gets every `npm run` its docs name reported under `scripts`, as
+`scripts` checks only the `run` forms. A bare `yarn X` or `pnpm X` also runs a dependency's binary
+(yarn's and pnpm's docs say so), so `yarn tsc` names no script, is no error, and is left alone.
+`yarn run X` and `bun run X` can run a binary too (their docs say so), so a doc naming
+`yarn run tsc` is reported.
+
+A project without `package.json` gets every script its docs run reported under `scripts`, as
 `no package.json`, and nothing when they name none. Without the index file, `index` reports that
 file as not found and nothing else, `init` reports its fragments missing, and the other checks run
 as usual. A symlink to nothing in a scanned folder is reported under `links`.
@@ -62,7 +67,7 @@ as usual. A symlink to nothing in a scanned folder is reported under `links`.
 ## The two lists in the config
 
 `absentByDesign` holds paths a doc may name that a clean checkout does not have: generated, vendored
-per project or deliberately hypothetical. `absentScripts` does the same for an `npm run` a doc names
+per project or deliberately hypothetical. `absentScripts` does the same for a script a doc runs
 while explaining why it does not exist. Both are empty by default. An entry in either is a statement
 that the absence is intended — that is the point of writing them down rather than inferring.
 

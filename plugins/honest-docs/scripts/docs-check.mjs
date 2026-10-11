@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Checks the project's docs against the tree: links, anchors, backticked paths, `npm run` names, the
+// Checks the project's docs against the tree: links, anchors, backticked paths, `<runner> run` names, the
 // docs index, `covers:` globs, the Last Updated line and what /honest-docs:init wrote. Run as
 // `honest-docs-check` (bin/), or by the project's guard through $HONEST_DOCS_SCRIPTS. What it scans
 // and what it accepts as absent comes from .claude/honest-docs.json (core/config.mjs).
@@ -93,7 +93,7 @@ const headings = new Map(
   ])
 );
 
-// Not every project has one; then every `npm run` a doc names is reported, and none is no problem.
+// Not every project has one; then every script a doc runs is reported, and none is no problem.
 const pkg = existsSync(join(ROOT, 'package.json')) ? JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) : null;
 const trimSlash = (p) => p.replace(/\/$/, '');
 const isAbsentByDesign = (p) =>
@@ -107,6 +107,13 @@ const isAbsentByDesign = (p) =>
 const SPECIFIER_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs'];
 const resolvesAsSpecifier = (token) =>
   SPECIFIER_EXTENSIONS.some((ext) => existsSync(join(ROOT, `${token}${ext}`)) || existsSync(join(ROOT, token, `index${ext}`)));
+
+/**
+ * The `run` form of each package manager. Bare `yarn x` and `pnpm x` also run a dependency's binary
+ * (`yarn tsc`), so a name missing from `scripts` there is no error, and they are not checked
+ * (references/docs-check.md has the cost).
+ */
+const RUN_SCRIPT = /\b(npm|pnpm|yarn|bun) run ([a-z0-9:_-]+)(\*?)/g;
 
 for (const doc of docs) {
   const rel = relative(ROOT, doc);
@@ -167,8 +174,8 @@ for (const doc of docs) {
       report('paths', rel, line, `no such path: ${token}`);
     }
 
-    for (const m of text.matchAll(/npm run ([a-z0-9:_-]+)(\*?)/g)) {
-      const [, name, glob] = m;
+    for (const m of text.matchAll(RUN_SCRIPT)) {
+      const [, , name, glob] = m;
       if (glob || ABSENT_SCRIPTS.includes(name) || pkg?.scripts?.[name]) continue;
       report('scripts', rel, line, pkg ? `no npm script: ${name}` : `no npm script: ${name} — no package.json`);
     }

@@ -140,6 +140,32 @@ test('paths: a specifier that resolves to nothing is still reported', (t) => {
   assertOnly(check(root), 'paths', '_docs/features/alpha.md:12  no such path: src/types');
 });
 
+for (const runner of ['pnpm', 'yarn', 'bun']) {
+  test(`scripts: a ${runner} run name package.json does not have`, (t) => {
+    const { root } = cleanProject(t);
+    edit(root, '_docs/features/alpha.md', (text) => `${text}\n\`${runner} run nope\`\n`);
+    assertOnly(check(root), 'scripts', '_docs/features/alpha.md:12  no npm script: nope');
+  });
+
+  test(`scripts: a ${runner} run name package.json has passes`, (t) => {
+    const { root } = cleanProject(t);
+    edit(root, '_docs/features/alpha.md', (text) => `${text}\n\`${runner} run test\`\n`);
+    assert.equal(check(root).status, 0);
+  });
+}
+
+test('scripts: bare yarn and pnpm are not checked, they may run a binary', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, '_docs/features/alpha.md', (text) => `${text}\n\`yarn tsc\`, \`pnpm eslint\`, \`yarn nope\`.\n`);
+  assert.equal(check(root).status, 0);
+});
+
+test('scripts: npm run inside a longer word is not a command', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, '_docs/features/alpha.md', (text) => `${text}\nxnpm run nope\n`);
+  assert.equal(check(root).status, 0);
+});
+
 test('index: a page in _docs/features/ the index does not list', (t) => {
   const { root } = cleanProject(t);
   writeFiles(root, { '_docs/features/gamma.md': BETA.replace('Beta', 'Gamma') });

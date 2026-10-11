@@ -12,6 +12,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 - **A project's guard can say it could not check.** A guard that exits non-zero with a line `GUARD_ERROR reason=<text>` no longer blocks the stop: the user is told why, and the files stay unchecked until the next stop. A `GUARD_FAIL` line still blocks.
 
+### Changed
+
+- **`honest-docs-check` checks `pnpm run`, `yarn run` and `bun run` as well as `npm run`.** Bare `yarn x` and `pnpm x` are not checked: they can run a dependency's program as well as a script.
+
 ### Fixed
 
 - **A path written the way code imports it is not reported as missing:** `hooks/useAnalytics` passes when `hooks/useAnalytics.ts`, or a folder with an `index` file, exists.
