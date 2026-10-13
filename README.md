@@ -1,84 +1,60 @@
 # ai-kit
 
-A personal marketplace of plugins and skills for AI coding agents by [@mwx27](https://github.com/mwx27) — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) now, Codex planned.
+Plugins for AI coding agents by [@mwx27](https://github.com/mwx27) — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) now, Codex planned.
 
-## Status & scope
-
-These are personal tools, published so they're easy to version and reinstall across machines — not (yet) turnkey for general use.
-
-`cv-bullets` in particular is tightly coupled to my own CV: it assumes a specific data shape (`content/cv.pl.ts` / `content/cv.en.ts`, with `aiItExperience` / `itExperience` sections and a particular field schema) and bilingual Polish/English output. The CV itself isn't in this repo (it's live at [maciejwojda.cv](https://maciejwojda.cv)), and `config.md` externalizes only paths and your git-author pattern — not the CV structure. So it fits my setup out of the box, less so yours.
-
-None of that is fundamental, though: the coupling lives in assumptions (CV schema, languages, section names) that could move into config. Making it genuinely reusable for others is a realistic future direction — just not there yet.
-
-## Installation
-
-Add this marketplace, then install a plugin from it:
+Add the marketplace once, then install plugins from it:
 
 ```
 /plugin marketplace add mwx27/ai-kit
-/plugin install cv-bullets@mwx27-ai-kit
 ```
 
-## Configuration
+| Plugin                        | What it does                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------- |
+| [honest-docs](#honest-docs)   | Your agent reads the docs. Make sure they're not lying.                          |
+| [cv-bullets](#cv-bullets)     | A personal tool that writes my CV bullets from a project repo; not built for reuse. |
 
-Some skills read a per-user config file so they don't ship anyone's personal paths or identity. For `cv-bullets`:
-
-1. Copy the example config into your Claude config directory:
-
-   ```bash
-   mkdir -p ~/.claude/skills/cv-bullets
-   cp ~/.claude/plugins/cache/mwx27-ai-kit/cv-bullets/<version>/config.md.example ~/.claude/skills/cv-bullets/config.md
-   ```
-
-   (Replace `<version>` with the installed version shown in `/plugin`.)
-
-2. Open `~/.claude/skills/cv-bullets/config.md` and fill in:
-   - **`cv_path`** — path to your CV folder (the one containing `content/cv.pl.ts` / `content/cv.en.ts`)
-   - **`git_author_pattern`** — substring(s) for `git log --author` matching your commits (GitHub nick, email fragment, or name; comma-separated if you use several accounts)
-
-`config.md` is git-ignored, so your personal data never gets committed. If you skip this step, the skill will ask you for both values on first run and offer to create the file for you.
-
-## Available skills
-
-### cv-bullets
-
-Generate, refine, or analyze CV/resume bullets for software projects. It runs a mandatory dialog gate to capture cross-repo context, scans the project repo (and related sibling repos), pulls git + PR metrics, categorizes achievements as baseline vs senior, and composes bilingual (Polish/English) bullets that follow a strict style guide — writing them straight into your CV files for review via `git diff`. If the work it found looks thin for how long you were on the project, it re-scans the repo before composing so whole parts of your contribution don't get left out.
-
-Alongside that private working inventory it also writes a redacted, public-safe version (client metrics, file paths, and teammate attribution stripped out) for outward-facing use such as a recruiter-facing chatbot — kept in sync with the private one, as a draft to review before you share it.
-
-One caveat worth knowing: to stop you from claiming a teammate's work, the skill checks `git blame` before it bullets any file. That check is a strong filter, not the last word — if you reformatted a whole repo (say, ran Prettier) or did heavy refactoring, git can credit you with code that is really someone else's. Treat its authorship calls as a guardrail and use your own judgement; you stay the final authority on what's genuinely yours.
-
-### honest-docs
+## honest-docs
 
 Your agent reads the docs. Make sure they're not lying. A plugin that keeps a project's docs and agent rules in step with its code:
 
-- At the end of every turn, it runs your project's own check script on the files the turn changed, and if it fails, the agent has to fix it before handing back. It gives up after three identical failures rather than looping.
+- At the end of every turn that changed something, it checks the docs, then runs your project's own check script on the changed files. If either fails, the agent has to fix it before handing back. It gives up after three identical failures rather than looping.
 - It keeps each doc's `**Last Updated:**` date current, from when the file actually changed.
 - When code that a doc says it describes changes, it tells the agent to re-read that doc.
-- `honest-docs-check` catches docs that point at files, headings, paths or scripts that no longer exist; `/honest-docs:docs-audit` goes further and checks what the docs claim against the code.
+- `honest-docs-check` catches docs that point at files, headings, paths or scripts that no longer exist; `honest-docs-grep <symbol>` lists every line of the docs and rules that names a symbol; `/honest-docs:docs-audit` goes further and checks what the docs claim against the code.
 
 Whether a sentence is still true is something only a reader can judge: you, or the audit.
 
-**Install.** It is meant to run only in projects that opt in. Add the marketplace and install the plugin:
+It needs `node` and `git` on the PATH.
 
-```
-/plugin marketplace add mwx27/ai-kit
-/plugin install honest-docs@mwx27-ai-kit
-```
+### Setup
 
-Then turn it on in the project's `.claude/settings.json`:
+It is meant to run only in projects that opt in.
 
-```json
-{ "enabledPlugins": { "honest-docs@mwx27-ai-kit": true } }
-```
+1. Install it:
 
-If your install turned it on for every project, set the same entry to `false` in `~/.claude/settings.json`; the project's setting wins. Start a new session in the project and run `/honest-docs:init`. It writes the docs rule, a starter `.claude/honest-docs.json`, two short passages in `CLAUDE.md`, added at the end under `## honest-docs` the first time (move them wherever you like), and a line for the docs rule in the `## Rules` list of `CLAUDE.md`, which it creates if there is none; run it again after every plugin update. It warns when the docs folder it expects does not exist, naming the folders that hold Markdown files, and when git ignores a file it writes.
+   ```
+   /plugin install honest-docs@mwx27-ai-kit
+   ```
 
-The docs rule is the plugin's and is rewritten on every run. Rules for docs that only your project needs go in a rule file of your own, which the plugin never touches; [`references/instruction-channels.md`](plugins/honest-docs/references/instruction-channels.md#decisions) says how.
+2. Turn it on in the project's `.claude/settings.json`:
 
-At the end of every turn that changed something, the plugin runs `honest-docs-check` over all the docs and sends the agent back to fix what it finds, so make it report no problems before you turn the plugin on.
+   ```json
+   { "enabledPlugins": { "honest-docs@mwx27-ai-kit": true } }
+   ```
 
-**Connect your check script** (optional). To have the same end-of-turn check also run your own checks, name the command in `.claude/honest-docs.json`:
+   If your install turned it on for every project, set the same entry to `false` in `~/.claude/settings.json`; the project's setting wins.
+
+3. Add `artifacts/` to `.gitignore`. The plugin keeps its working files in `artifacts/claude-hooks/` and `artifacts/logs/`; `stateDir` and `logDir` move them.
+
+4. Start a new session in the project and run `/honest-docs:init`. It writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md`. Run it again after every plugin update.
+
+5. Have the agent run `honest-docs-check` and fix what it reports. The end-of-turn check covers all the docs, so until this passes, every turn that changes anything is sent back to fix docs it never touched.
+
+The docs rule is the plugin's and is rewritten on every `init`. Rules only your project needs go in a rule file of your own, which the plugin never touches; [`references/instruction-channels.md`](plugins/honest-docs/references/instruction-channels.md#decisions) says how.
+
+### Connect your check script (optional)
+
+To have the end-of-turn check also run your own checks, name the command in `.claude/honest-docs.json`:
 
 ```json
 { "guard": { "command": ["bash", "scripts/guard.sh"] } }
@@ -86,6 +62,18 @@ At the end of every turn that changed something, the plugin runs `honest-docs-ch
 
 The plugin calls it with `--changed` and the changed files, after `honest-docs-check` passes; a non-zero exit means it failed. What the command must do, and every other setting, is in [`references/hooks.md`](plugins/honest-docs/references/hooks.md) and [`core/config.mjs`](plugins/honest-docs/core/config.mjs).
 
-The plugin keeps its working files in `artifacts/claude-hooks/` and `artifacts/logs/` in the project; add `artifacts/` to `.gitignore`, or move them with `stateDir` and `logDir`.
+### Limitations
 
-**Limitations.** The end-of-turn check cannot tell your own mid-session edits from the agent's. Changes are in [`CHANGELOG.md`](plugins/honest-docs/CHANGELOG.md).
+The end-of-turn check cannot tell your own mid-session edits from the agent's. Changes are in [`CHANGELOG.md`](plugins/honest-docs/CHANGELOG.md).
+
+## cv-bullets
+
+A personal tool I built while writing my own CV. It turns a project repo into bilingual (Polish/English) CV bullets: it asks about related repos first, reads the git history, checks with `git blame` that the work is yours, and writes the bullets straight into the CV files for review via `git diff`. It also writes a redacted copy of its notes that is safe to share.
+
+It is tied to my CV's shape: it expects `content/cv.pl.ts` / `content/cv.en.ts` with `aiItExperience` / `itExperience` sections, and only paths and your git author live in config. It is published so I can reinstall it, not as a general tool.
+
+```
+/plugin install cv-bullets@mwx27-ai-kit
+```
+
+On first run it asks for `cv_path` (the folder holding `content/`) and `git_author_pattern` (substrings for `git log --author`, comma-separated), and offers to save them in `~/.claude/skills/cv-bullets/config.md`, which is never committed. Changes are in [`CHANGELOG.md`](plugins/cv-bullets/CHANGELOG.md).
