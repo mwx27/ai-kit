@@ -303,7 +303,14 @@ test('index: no CLAUDE.md is one problem, and the other checks still run', (t) =
 test('links: a symlink to nothing in a scanned folder', (t) => {
   const { root } = cleanProject(t);
   mkdirSync(path.join(root, '.claude/skills'));
-  symlinkSync(path.join(root, 'nowhere'), path.join(root, '.claude/skills/gone'));
+  try {
+    symlinkSync(path.join(root, 'nowhere'), path.join(root, '.claude/skills/gone'));
+  } catch (error) {
+    // Windows without Developer Mode or admin rights may not create symlinks.
+    if (error.code !== 'EPERM') throw error;
+    t.skip(`symlinkSync: ${error.message}`);
+    return;
+  }
   assertOnly(check(root), 'links', '.claude/skills/gone  symlink to a file that does not exist');
 });
 

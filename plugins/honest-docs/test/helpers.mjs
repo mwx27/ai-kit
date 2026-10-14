@@ -99,6 +99,9 @@ export function runBin(command, args, { cwd, env = {} }) {
 export const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 export const readLines = (file) => readFileSync(file, 'utf8').split('\n').filter(Boolean);
 
+/** `text` matched literally inside a RegExp: a Windows path's `\U` or `\A` breaks the pattern otherwise. */
+export const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** What docs-check needs besides the rule to pass: package.json, and CLAUDE.md with both fragments. */
 export const docsBaseline = () => ({
   'package.json': '{ "name": "fixture" }\n',

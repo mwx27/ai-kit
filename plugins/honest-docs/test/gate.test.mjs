@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { PLUGIN_ROOT, docsBaseline, git, readJson, readLines, runHook, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
+import { PLUGIN_ROOT, docsBaseline, escapeRegExp, git, readJson, readLines, runHook, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const SESSION = 'gate-session';
 const STATE = `artifacts/claude-hooks/honest-docs-${SESSION}.json`;
@@ -187,7 +187,7 @@ test('the third identical failure lets the stop through and records gaveUp', (t)
     third.message,
     new RegExp(
       `^docs-check, guard --changed: 1 file, \\d+\\.\\ds - eslint still fails after 3 identical attempts, letting the stop through\\. ` +
-        `Nothing was fixed; run \`node ${p.guard}\` to see it\\.$`
+        `Nothing was fixed; run \`node ${escapeRegExp(p.guard)}\` to see it\\.$`
     )
   );
 
