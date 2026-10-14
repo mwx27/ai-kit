@@ -3,7 +3,13 @@ name: honest-docs tests
 on:
   push:
     branches: [main]
+    paths:
+      - plugins/honest-docs/**
+      - .github/workflows/honest-docs.yml
   pull_request:
+    paths:
+      - plugins/honest-docs/**
+      - .github/workflows/honest-docs.yml
 
 permissions:
   contents: read
