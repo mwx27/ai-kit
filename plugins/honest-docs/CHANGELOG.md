@@ -6,6 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.1.6] — 2026-10-13
+
+### Fixed
+
+- **On Windows, paths are printed and logged with `/`, as on every other OS.** `honest-docs-check` reported `_docs\features\alpha.md:12`, and the instructions log wrote `.claude\rules\code-quality.md trigger=lib\utils\cn.ts`. Two checks misfired there as well: a doc in the docs folder without its Last Updated line passed unreported, and a link to a path under an `absentByDesign` entry was reported missing. A command the Stop gate tells you to run keeps your system's form.
+- **`/honest-docs:init` no longer warns about a file that a negated pattern in your global gitignore (`core.excludesFile`) brings back** when the global gitignore's own path holds a colon, as `C:/…` does on Windows.
+
+---
+
 ## [0.1.5] — 2026-10-12
 
 ### Added
