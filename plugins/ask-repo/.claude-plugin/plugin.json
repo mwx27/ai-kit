@@ -1,0 +1,8 @@
+{
+  "name": "ask-repo",
+  "version": "0.1.0",
+  "description": "Ask questions about another local repository, answered by a read-only Claude session inside it.",
+  "author": {
+    "name": "Maciej Wojda"
+  }
+}

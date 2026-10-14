@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Asks a question about another local repository. Run `ask-repo --help` for usage.
+exec node "$(dirname "${BASH_SOURCE[0]}")/../scripts/ask-repo.mjs" "$@"
