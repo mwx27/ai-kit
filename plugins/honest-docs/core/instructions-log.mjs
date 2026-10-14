@@ -15,7 +15,8 @@
 //   <ISO ts>  skill:slash  <command name> source=<command_source>
 //   <ISO ts>  skill:Read  <file under .claude/skills/>
 // The loading format is a measurement contract compared against earlier sessions — do not touch
-// it. The colon in `write:` and `skill:` is what keeps those lines apart from any future load_reason.
+// it. The contract is the POSIX form, which posixPath keeps on every OS. The colon in `write:` and
+// `skill:` is what keeps those lines apart from any future load_reason.
 //
 // A skill line is an invocation, not a load: a Skill call on a skill already in context gets
 // "already loaded" back and still logs `skill:Skill`, and a `/name` the user types logs only
@@ -32,6 +33,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { ConfigError, loadConfig, skippedRoots } from './config.mjs';
 import { logEvent } from './log.mjs';
+import { posixPath } from './posix-path.mjs';
 
 const SKILLS_DIR = '.claude/skills/';
 
@@ -42,10 +44,10 @@ function isNonEmptyString(value) {
 function lineBody(input, root, ignoredRoots) {
   /** Repo-relative POSIX path, or null for anything outside the repo or under an ignored root. */
   function repoRelative(filePath) {
-    const rel = path.relative(root, path.resolve(root, filePath));
+    const rel = posixPath(path.relative(root, path.resolve(root, filePath)));
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
-    if (ignoredRoots.includes(rel.split(path.sep)[0])) return null;
-    return rel.split(path.sep).join('/');
+    if (ignoredRoots.includes(rel.split('/')[0])) return null;
+    return rel;
   }
 
   /** `write:…` for Edit|Write, `skill:…` for Skill and a Read under .claude/skills/, else null. */
@@ -70,8 +72,8 @@ function lineBody(input, root, ignoredRoots) {
   function loadLine() {
     const file = input.file_path;
     if (!isNonEmptyString(file)) return null;
-    const trigger = input.trigger_file_path ? ` trigger=${path.relative(root, input.trigger_file_path)}` : '';
-    return `${input.load_reason ?? '?'}  ${path.relative(root, file)}${trigger}`;
+    const trigger = input.trigger_file_path ? ` trigger=${posixPath(path.relative(root, input.trigger_file_path))}` : '';
+    return `${input.load_reason ?? '?'}  ${posixPath(path.relative(root, file))}${trigger}`;
   }
 
   if (input.hook_event_name === 'PostToolUse') return toolLine();

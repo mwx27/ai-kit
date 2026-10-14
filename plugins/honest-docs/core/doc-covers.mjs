@@ -6,6 +6,7 @@
 // `paths:` matching, so the two are different semantics, not a duplicate.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { posixPath } from './posix-path.mjs';
 
 const escapeRe = (c) => (/[.+^${}()|[\]\\]/.test(c) ? `\\${c}` : c);
 
@@ -82,7 +83,7 @@ export function readCovers(root, docsDir) {
       const text = readFileSync(file, 'utf8');
       const globs = coversOf(text);
       return {
-        doc: path.relative(root, file).split(path.sep).join('/'),
+        doc: posixPath(path.relative(root, file)),
         declared: globs.length > 0 || declaresCovers(text),
         globs,
         patterns: globs.map(globToRegExp),
