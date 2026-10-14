@@ -164,23 +164,26 @@ function missingDocsDirWarning(root, config) {
 export function ignoredByGit(root, files) {
   let output;
   try {
-    output = execFileSync('git', ['-C', root, 'check-ignore', '-v', '--', ...files], {
+    // -z needs --stdin. Its fields are NUL-separated, so a source path holding a colon (a Windows
+    // core.excludesFile, C:/…) cannot be misread.
+    output = execFileSync('git', ['-C', root, 'check-ignore', '-v', '-z', '--stdin'], {
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
+      input: files.map((file) => `${file}\0`).join(''),
+      stdio: ['pipe', 'pipe', 'ignore'],
     });
   } catch {
     // Exit 1 is "none ignored"; anything else (no git, no repo) means no check.
     return [];
   }
-  return output
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const [source, file] = line.split('\t');
-      return { file, source };
-    })
+  const fields = output.split('\0');
+  const ignored = [];
+  // Four fields per path: source, line, pattern, path.
+  for (let i = 0; i + 3 < fields.length; i += 4) {
+    const [source, line, pattern, file] = fields.slice(i, i + 4);
     // With -v a negated pattern that matched is printed too, though the file is not ignored.
-    .filter(({ source }) => !/^[^:]*:\d+:!/.test(source));
+    if (!pattern.startsWith('!')) ignored.push({ file, source: `${source}:${line}:${pattern}` });
+  }
+  return ignored;
 }
 
 /** The version stamped in a docs.md, or null when its last line is not a stamp. */

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
 import { fragmentVersions, renderDocsRule } from '../core/init.mjs';
-import { PLUGIN_VERSION, fragment, fragmentVersion, runBin, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
+import { PLUGIN_VERSION, fragment, fragmentVersion, git, runBin, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const HEAD = '# Project\n\n## CRITICAL\n\n- Keep it short.\n- ';
 const MIDDLE = '\n\n## Docs\n\n';
@@ -346,6 +346,20 @@ test('a tracked file matching an ignore pattern, or one a negation re-includes, 
   const run = init(root);
   assert.equal(run.status, 0);
   assert.equal(run.stderr, '');
+});
+
+test('a negation in a core.excludesFile at an absolute path is not reported', (t) => {
+  const { dir, root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': '' });
+  // Outside the repo and absolute, as a global excludes file is, and with a colon in its path: on
+  // Windows the drive letter gives one, elsewhere the temp path has none, so the name carries it.
+  const excludes = path.join(dir, process.platform === 'win32' ? 'gitignore_global' : 'global:gitignore');
+  writeFileSync(excludes, '.claude/*\n!.claude/honest-docs.json\n');
+  git(root, 'config', 'core.excludesFile', excludes);
+  const run = init(root);
+  assert.equal(run.status, 0);
+  // The excludes file is read: the rule it does ignore is reported, the negated config is not.
+  assert.match(run.stderr, /^honest-docs-init: warning: \.claude\/rules\/docs\.md is ignored by git \(.+:1:\.claude\/\*\), /);
+  assert.doesNotMatch(run.stderr, /honest-docs\.json/);
 });
 
 test('outside a git repo: no ignore check, no warning', (t) => {
