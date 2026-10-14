@@ -18,6 +18,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { projectRoot } from '../core/config.mjs';
+import { posixPath } from '../core/posix-path.mjs';
 
 const ROOT = projectRoot();
 const RULES_DIR = path.join(ROOT, '.claude', 'rules');
@@ -101,7 +102,7 @@ const readRule = (file) => {
 
 const inputs = process.argv.slice(2);
 const all = inputs.includes('--all');
-const files = inputs.filter((a) => !a.startsWith('--')).map((f) => f.split(path.sep).join('/'));
+const files = inputs.filter((a) => !a.startsWith('--')).map(posixPath);
 
 if (!all && files.length === 0) {
   console.error('usage: context-budget.mjs <file>... | --all');

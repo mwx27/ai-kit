@@ -12,6 +12,7 @@ import { readCovers } from '../core/doc-covers.mjs';
 import { checkInit, listedRules, rulesSection } from '../core/init.mjs';
 import { LAST_UPDATED_LINE } from '../core/last-updated.mjs';
 import { logEvent } from '../core/log.mjs';
+import { posixPath } from '../core/posix-path.mjs';
 
 const ROOT = projectRoot();
 let config;
@@ -53,7 +54,7 @@ function walk(dir, out = []) {
     const full = join(dir, entry);
     // A symlink to nothing would stop the run at statSync.
     if (!existsSync(full)) {
-      report('links', relative(ROOT, full), 0, 'symlink to a file that does not exist');
+      report('links', posixPath(relative(ROOT, full)), 0, 'symlink to a file that does not exist');
       continue;
     }
     if (statSync(full).isDirectory()) walk(full, out);
@@ -116,7 +117,7 @@ const resolvesAsSpecifier = (token) =>
 const RUN_SCRIPT = /\b(npm|pnpm|yarn|bun) run ([a-z0-9:_-]+)(\*?)/g;
 
 for (const doc of docs) {
-  const rel = relative(ROOT, doc);
+  const rel = posixPath(relative(ROOT, doc));
   const lines = readFileSync(doc, 'utf8').split('\n');
 
   /*
@@ -153,7 +154,7 @@ for (const doc of docs) {
       const [target, anchor] = raw.split('#');
       const file = target ? resolve(dirname(doc), target) : doc;
       if (target && !existsSync(file)) {
-        if (!isAbsentByDesign(relative(ROOT, file))) report('links', rel, line, `no such file: ${target}`);
+        if (!isAbsentByDesign(posixPath(relative(ROOT, file)))) report('links', rel, line, `no such file: ${target}`);
         continue;
       }
       if (anchor && headings.has(file) && !headings.get(file).has(anchor)) {

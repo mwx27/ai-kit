@@ -34,9 +34,10 @@ Claude Code documentation states. `cat` on a `SKILL.md` logs nothing because Bas
 matcher. Claude Code re-injects invoked skills after compaction _(documented)_, but the hooks documentation
 has no event for it, so the log cannot see it.
 
-Write and skill-read paths are made repo-relative POSIX; anything outside the repo is dropped, and so
-is anything under `node_modules/`, `.git/` or the top folder of `stateDir` and `logDir`
-(`artifacts/` by default) — the folders docs-check never walks.
+Every path in the log is repo-relative POSIX (`/`) on every OS, which on macOS and Linux leaves the
+load format as it always was; a write or skill-read path outside the repo is dropped, and so is
+anything under `node_modules/`, `.git/` or the top folder of `stateDir` and `logDir` (`artifacts/`
+by default) — the folders docs-check never walks.
 
 The log is raw and append-only — no deduplication, no aggregation. Counting unique files, or
 reloads after a compaction, is the reporting step's job, and it needs every line to do it.
