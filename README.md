@@ -11,6 +11,7 @@ Add the marketplace once, then install plugins from it:
 | Plugin                        | What it does                                                                     |
 | ----------------------------- | -------------------------------------------------------------------------------- |
 | [honest-docs](#honest-docs)   | Your agent reads the docs. Make sure they're not lying.                          |
+| [ask-repo](#ask-repo)         | Ask another repo on your machine a question without leaving the one you are in.  |
 | [cv-bullets](#cv-bullets)     | A personal tool that writes my CV bullets from a project repo; not built for reuse. |
 
 ## honest-docs
@@ -65,6 +66,38 @@ The plugin calls it with `--changed` and the changed files, after `honest-docs-c
 ### Limitations
 
 The end-of-turn check cannot tell your own mid-session edits from the agent's. Changes are in [`CHANGELOG.md`](plugins/honest-docs/CHANGELOG.md).
+
+## ask-repo
+
+When work in one repo depends on another — an app and its API, a client and its backend — your agent can ask the other repo instead of guessing. A separate Claude session starts inside that repo, finds the answer in its code and hands it back. Follow-up questions continue the same session, so it does not search from scratch each time.
+
+The session in the other repo can only read files: it gets none of your MCP servers and none of the permissions your own settings grant. It needs `node` and `claude` on the PATH.
+
+### Setup
+
+1. Install it:
+
+   ```
+   /plugin install ask-repo@mwx27-ai-kit
+   ```
+
+2. Register each repo you want to ask by a short name. Have the agent run, or ask it to:
+
+   ```
+   ask-repo --add api ~/dev/my-api
+   ```
+
+   Names are kept in `~/.config/ask-repo/registry.json`, outside every repo, so no personal path is ever committed. `ask-repo --list` shows them, `ask-repo --remove <name>` drops one.
+
+### Use
+
+Ask in plain words ("ask api how tokens are refreshed"), or run `/ask-repo:ask api "how are tokens refreshed?"`. The agent also asks on its own when a task needs a registered repo. `ask-repo --help` lists the options, among them `--git`, which also lets the session read the other repo's git history.
+
+Answers are saved in `artifacts/ask-repo/` of the project you ask from, so the agent can look there before asking again. That folder ignores itself in git, and a conversation unused for 7 days is deleted.
+
+### Limitations
+
+Each question runs a full Claude session on your account. The `ask-repo` command works only inside Claude Code, not in your own terminal. With `--git`, a git option that writes a file is forbidden to the session by its instructions, not blocked. Changes are in [`CHANGELOG.md`](plugins/ask-repo/CHANGELOG.md).
 
 ## cv-bullets
 

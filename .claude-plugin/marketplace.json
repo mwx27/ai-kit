@@ -11,6 +11,11 @@
       "description": "Your agent reads the docs. Make sure they're not lying."
     },
     {
+      "name": "ask-repo",
+      "source": "./plugins/ask-repo",
+      "description": "Ask questions about another local repository, answered by a read-only Claude session inside it."
+    },
+    {
       "name": "cv-bullets",
       "source": "./plugins/cv-bullets",
       "description": "Generate, refine, or analyze CV/resume bullets for software projects — bilingual (Polish/English), repo-aware, with git metrics and a senior-vs-baseline filter."
