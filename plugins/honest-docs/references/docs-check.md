@@ -2,22 +2,22 @@
 
 `honest-docs-check` (`<plugin_root>/scripts/docs-check.mjs`) answers one question about every
 Markdown file the config's `scan` names that git tracks or would track — by default the docs folder
-(`docsDir`, `_docs/`), `.claude/rules/`, `.claude/skills/`, `CLAUDE.md` and `README.md`: **does everything this text points
-at still exist?** Six checks ask that, a seventh, `updated`, that every doc carries the date line the
-Stop gate rewrites, and an eighth, `init`, that what `/honest-docs:init` wrote is current — file
-reads, regexes and two git calls, no dependencies, well under a second. The Stop gate runs it
-itself on every stop with changes to check, before the project's guard, and a failure blocks as
-check `docs` ([`hooks.md`](hooks.md#stop-gatemjs--stop)).
+(`docsDir`, `_docs/`), `.claude/rules/`, `.claude/skills/`, `CLAUDE.md` and `README.md`: **does
+everything this text points at still exist?** Six checks ask that, a seventh, `updated`, that every
+doc carries the date line the Stop gate rewrites, and an eighth, `init`, that what
+`/honest-docs:init` wrote is current — file reads, regexes and two git calls, no dependencies, well
+under a second. The Stop gate runs it itself on every stop with changes to check, before the
+project's guard, and a failure blocks as check `docs` ([`hooks.md`](hooks.md#stop-gatemjs--stop)).
 
 The rule files are in scope for the same reason the docs are: they carry links and paths, they are
 read as instructions, and a rule pointing at a file that moved is worse than a doc doing it — the
 reader acts on it.
 
 A file git ignores is skipped by every check, the `index` and `covers` ones included, and by
-`honest-docs-grep`: an ignored doc is one person's notes, not the project's docs, and must never block
-anyone's turn. One list in `<plugin_root>/core/doc-set.mjs` serves them all. Without git — not a
-repo, no binary, a failing call — the folders are walked on disk as before, ignored files included,
-and one line says they could not be told apart.
+`honest-docs-grep`: an ignored doc is one person's notes, not the project's docs, and must never
+block anyone's turn. One list in `<plugin_root>/core/doc-set.mjs` serves them all. Without git — not
+a repo, no binary, a failing call — the folders are walked on disk as before, ignored files
+included, and one line says they could not be told apart.
 
 The rule half of `index` reads only the Rules section of the index file: other sections link rules
 as pointers, and a rule linked only there is still missing from the index.
@@ -25,8 +25,8 @@ as pointers, and a rule linked only there is still missing from the index.
 | Check     | What must hold                                                                                                                                                                                                                                   |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `links`   | every relative markdown link resolves to a file                                                                                                                                                                                                  |
-| `anchors` | every `#anchor` into a scanned page matches a heading in that page                                                                                                                                                                               |
-| `paths`   | every backticked repo path exists on disk, as written or as a JS/TS import specifier (below)                                                                                                                                                     |
+| `anchors` | every `#anchor` into a scanned page matches a heading in that page, and no link ends in a line anchor (`#L12`, `#L12-L30`)                                                                                                                       |
+| `paths`   | every backticked repo path exists on disk, as written or as a JS/TS import specifier, and carries no line number (below)                                                                                                                         |
 | `scripts` | every `npm run X`, `pnpm run X`, `yarn run X` and `bun run X` names a script in `package.json`                                                                                                                                                   |
 | `index`   | the docs index in the index file (`index.file`, `CLAUDE.md` by default) and the `index.groups` folders under the docs folder (`features` and `tools`) agree, both ways; so do its Rules section (`index.rulesHeading`, `Rules`) and `.claude/rules/` |
 | `covers`  | every glob in a doc's `covers:` frontmatter matches a file on disk that git tracks or would track, and the key holds one                                                                                                                         |
@@ -60,6 +60,14 @@ by the same `<plugin_root>/core/doc-covers.mjs` as the doc reminder
 A backticked path that does not exist as written is tried as an import specifier before it is
 reported — with `.ts`, `.tsx`, `.js`, `.jsx` and `.mjs` appended, and as `<path>/index.<ext>` — so
 `hooks/useAnalytics` passes when `hooks/useAnalytics.ts` exists.
+
+A line number in a doc is a problem: it moves with every edit of the file, so the pointer rots fast
+and in silence. A backticked `<path>:<lines>` — `a.ts:12`, `a.ts:12-30`, `a.ts:43,60`,
+`a.ts:576/588`, and with a column, `a.ts:12:5` — is reported under `paths` when the path is a repo
+path as above, or a bare file name that some file in the repo has (with git only); a missing path is
+reported as missing instead. A link to a GitHub line anchor, `#L12` or `#L12-L30`, is reported under
+`anchors`. Nothing is rewritten: the doc fails until it names the file, a symbol or a heading.
+`localhost:8081` names no file and is left alone.
 
 `scripts` checks only the `run` forms. A bare `yarn X` or `pnpm X` also runs a dependency's binary
 (yarn's and pnpm's docs say so), so `yarn tsc` names no script, is no error, and is left alone.

@@ -55,6 +55,9 @@ const scanned = docSet(ROOT, config, undefined, LISTED);
 for (const file of scanned.dangling) report('links', file, 0, 'symlink to a file that does not exist');
 const docs = scanned.docs.map((doc) => join(ROOT, doc));
 
+/** File names in the repo, so a bare `store.ts:12` is known to name a file; without git none is. */
+const BASENAMES = new Set((LISTED ?? []).map((file) => file.slice(file.lastIndexOf('/') + 1)));
+
 /** The docs directly in `dir`, for the index: the same set, so an ignored page needs no entry. */
 const docsIn = (dir) =>
   docSet(ROOT, config, { dirs: [dir], files: [] }, LISTED)
@@ -109,6 +112,14 @@ const resolvesAsSpecifier = (token) =>
  */
 const RUN_SCRIPT = /\b(npm|pnpm|yarn|bun) run ([a-z0-9:_-]+)(\*?)/g;
 
+/*
+ * A line number moves with every edit of the file, so a doc pointing at one rots fast and in
+ * silence. It is reported, never rewritten: the author names the file, a symbol or a heading.
+ */
+const LINE_SPEC = /^(.+?):(\d+(?:[-,/]\d+)*(?::\d+)?)$/;
+const LINE_ANCHOR = /^L\d+(?:-L\d+)?$/;
+const lineNumber = (kind, token) => `line number in a ${kind}: ${token} — name the file, a symbol or a heading instead`;
+
 for (const doc of docs) {
   const rel = posixPath(relative(ROOT, doc));
   const lines = readFileSync(doc, 'utf8').split('\n');
@@ -150,22 +161,34 @@ for (const doc of docs) {
         if (!isAbsentByDesign(posixPath(relative(ROOT, file)))) report('links', rel, line, `no such file: ${target}`);
         continue;
       }
+      if (anchor && LINE_ANCHOR.test(anchor)) {
+        report('anchors', rel, line, lineNumber('link', raw));
+        continue;
+      }
       if (anchor && headings.has(file) && !headings.get(file).has(anchor)) {
         report('anchors', rel, line, `no heading "#${anchor}" in ${target || 'this file'}`);
       }
     }
 
     for (const m of text.matchAll(/`([^`\n]+)`/g)) {
-      const token = m[1].trim().replace(/\/$/, '');
-      if (/[{}*<>?|\s]/.test(token) || token.includes('://') || token.startsWith('/')) continue;
+      const quoted = m[1].trim().replace(/\/$/, '');
+      if (/[{}*<>?|\s]/.test(quoted) || quoted.includes('://') || quoted.startsWith('/')) continue;
+      // `a.ts:12`, `a.ts:12-30`, `a.ts:43,60`, `a.ts:576/588`, `a.ts:12:5`: the path is checked,
+      // the line reported.
+      const lineSpec = quoted.match(LINE_SPEC);
+      const token = lineSpec ? lineSpec[1] : quoted;
 
       const head = token.split('/')[0];
       const isRootFile = ROOT_FILES.includes(token);
       // `./config.js`, `../utils`: import specifiers quoted in prose, not repo paths.
       const isRepoPath = token.includes('/') && head !== '.' && head !== '..' && existsSync(join(ROOT, head));
-      if (!isRootFile && !isRepoPath) continue;
-      if (existsSync(join(ROOT, token)) || isAbsentByDesign(token) || resolvesAsSpecifier(token)) continue;
-      report('paths', rel, line, `no such path: ${token}`);
+      // Only with a line number: a bare `store.ts` alone is a convention (ROOT_FILES above), and
+      // `localhost:8081` names no file in the repo.
+      const isRepoFileName = lineSpec && !token.includes('/') && BASENAMES.has(token);
+      if (!isRootFile && !isRepoPath && !isRepoFileName) continue;
+      if (!isRepoFileName && !existsSync(join(ROOT, token)) && !isAbsentByDesign(token) && !resolvesAsSpecifier(token))
+        report('paths', rel, line, `no such path: ${token}`);
+      else if (lineSpec) report('paths', rel, line, lineNumber('path', quoted));
     }
 
     for (const m of text.matchAll(RUN_SCRIPT)) {
