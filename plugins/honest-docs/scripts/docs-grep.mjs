@@ -3,17 +3,17 @@
 // renamed, removed or changed the behavior of a name can fix the sentences it made false. Called
 // from the Docs policy in CLAUDE.md as `honest-docs-grep` (bin/).
 //
-// The searched locations are the config's `scan` (core/config.mjs) — the root instructions name the
-// command, not the folders.
+// The searched docs are the config's `scan` (core/config.mjs), files git ignores left out
+// (core/doc-set.mjs) — the root instructions name the command, not the folders.
 //
 // Usage:  honest-docs-grep <symbol> [<symbol>...]
 //
 // Matching is a literal, case-sensitive substring test, line by line. Exit 0 whether or not
-// anything matched; 64 on a usage error, 1 when git is unavailable, 2 on a broken config.
-import { execFileSync } from 'node:child_process';
+// anything matched; 64 on a usage error, 2 on a broken config.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigError, loadConfig, projectRoot } from '../core/config.mjs';
+import { docSet } from '../core/doc-set.mjs';
 import { logEvent } from '../core/log.mjs';
 
 const ROOT = projectRoot();
@@ -26,8 +26,6 @@ try {
   process.exit(2);
 }
 
-const DIRS = config.scan.dirs.map((dir) => `${dir.replace(/\/+$/, '')}/`);
-const ROOT_FILES = config.scan.files;
 const MAX_LINE = 160;
 
 const symbols = process.argv.slice(2);
@@ -36,28 +34,11 @@ if (symbols.length === 0) {
   process.exit(64);
 }
 
-// Tracked and untracked-but-not-ignored: a doc written in the same change is searched, and a
-// gitignored scratch folder is not.
-let listed;
-try {
-  listed = execFileSync('git', ['-C', ROOT, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
-    encoding: 'utf8',
-    maxBuffer: 8 * 1024 * 1024,
-    stdio: ['ignore', 'pipe', 'ignore'],
-  });
-} catch {
-  console.error('docs-grep: git unavailable, cannot list the docs to search');
-  process.exit(1);
-}
+const { docs, git } = docSet(ROOT, config);
+if (!git) console.error('docs-grep: git unavailable, ignored files could not be told apart');
 
-const docs = [
-  ...new Set(
-    listed.split('\0').filter((f) => f.endsWith('.md') && (ROOT_FILES.includes(f) || DIRS.some((d) => f.startsWith(d))))
-  ),
-].sort();
-
-// A file deleted from disk but still in the index is skipped rather than failing the run.
-const contents = docs.flatMap((file) => {
+// A file that cannot be read is skipped rather than failing the run.
+const contents = docs.sort().flatMap((file) => {
   try {
     return [{ file, lines: readFileSync(join(ROOT, file), 'utf8').split('\n') }];
   } catch {

@@ -1,5 +1,7 @@
 // honest-docs-grep (scripts/docs-grep.mjs): every doc line naming a symbol, in the scanned places only.
 import assert from 'node:assert/strict';
+import { rmSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { runBin, tmpRepo, writeFiles } from './helpers.mjs';
 
@@ -54,6 +56,16 @@ test('an untracked doc is searched, a gitignored one is not', (t) => {
   const run = grep(root, 'fetchUser');
   assert.match(run.stdout, /^_docs\/features\/new\.md:1: /m);
   assert.doesNotMatch(run.stdout, /scratch/);
+});
+
+test('without git the folders are walked on disk, a gitignored doc included, and it says so', (t) => {
+  const { root } = project(t);
+  writeFiles(root, { '_docs/priv/scratch.md': 'fetchUser in scratch.\n' });
+  rmSync(path.join(root, '.git'), { recursive: true, force: true });
+  const run = grep(root, 'fetchUser');
+  assert.equal(run.status, 0);
+  assert.equal(run.stderr, 'docs-grep: git unavailable, ignored files could not be told apart\n');
+  assert.match(run.stdout, /^_docs\/priv\/scratch\.md:1: /m);
 });
 
 test('a long line is clipped to 160 characters', (t) => {

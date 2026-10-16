@@ -4,11 +4,11 @@
 // `honest-docs-check` (bin/), or by the project's guard through $HONEST_DOCS_SCRIPTS. What it scans
 // and what it accepts as absent comes from .claude/honest-docs.json (core/config.mjs).
 
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { ConfigError, loadConfig, projectRoot, skippedRoots } from '../core/config.mjs';
+import { ConfigError, loadConfig, projectRoot } from '../core/config.mjs';
 import { readCovers } from '../core/doc-covers.mjs';
+import { docSet, listRepoFiles } from '../core/doc-set.mjs';
 import { checkInit, listedRules, rulesSection } from '../core/init.mjs';
 import { LAST_UPDATED_LINE } from '../core/last-updated.mjs';
 import { logEvent } from '../core/log.mjs';
@@ -42,31 +42,24 @@ const ABSENT_SCRIPTS = config.absentScripts;
  */
 const ROOT_FILES = config.rootFiles;
 
-const SKIPPED = skippedRoots(config);
 const UNDATED = config.undated.map((dir) => `${dir.replace(/\/+$/, '')}/`);
 
 const findings = [];
 const report = (check, file, line, message) => findings.push({ check, file, line, message });
 
-function walk(dir, out = []) {
-  for (const entry of readdirSync(dir)) {
-    if (SKIPPED.includes(entry)) continue;
-    const full = join(dir, entry);
-    // A symlink to nothing would stop the run at statSync.
-    if (!existsSync(full)) {
-      report('links', posixPath(relative(ROOT, full)), 0, 'symlink to a file that does not exist');
-      continue;
-    }
-    if (statSync(full).isDirectory()) walk(full, out);
-    else if (entry.endsWith('.md')) out.push(full);
-  }
-  return out;
-}
+// One git call for the doc set (core/doc-set.mjs: ignored files are not docs) and the covers match.
+const LISTED = listRepoFiles(ROOT);
+if (!LISTED) console.log('docs-check: git unavailable, ignored files could not be told apart and covers globs not matched against files');
 
-const docs = [
-  ...config.scan.dirs.flatMap((d) => (existsSync(join(ROOT, d)) ? walk(join(ROOT, d)) : [])),
-  ...config.scan.files.map((f) => join(ROOT, f)).filter(existsSync),
-];
+const scanned = docSet(ROOT, config, undefined, LISTED);
+for (const file of scanned.dangling) report('links', file, 0, 'symlink to a file that does not exist');
+const docs = scanned.docs.map((doc) => join(ROOT, doc));
+
+/** The docs directly in `dir`, for the index: the same set, so an ignored page needs no entry. */
+const docsIn = (dir) =>
+  docSet(ROOT, config, { dirs: [dir], files: [] }, LISTED)
+    .docs.filter((doc) => !doc.slice(dir.length + 1).includes('/'))
+    .map((doc) => doc.slice(dir.length + 1));
 
 /**
  * GitHub's slugger. Two of its rules are worth reproducing exactly: punctuation is deleted rather
@@ -197,9 +190,7 @@ if (!existsSync(join(ROOT, INDEX_FILE))) {
   );
   const indexed = new Set(INDEX_GROUPS.length > 0 ? (claudeMd.match(indexPattern) ?? []) : []);
   for (const group of INDEX_GROUPS) {
-    const dir = join(ROOT, DOCS_DIR, group);
-    if (!existsSync(dir)) continue;
-    for (const entry of readdirSync(dir).filter((f) => f.endsWith('.md'))) {
+    for (const entry of docsIn(`${DOCS_DIR}/${group}`)) {
       if (!indexed.has(`${DOCS_DIR}/${group}/${entry}`))
         report('index', INDEX_FILE, 0, `page missing from the docs index: ${DOCS_DIR}/${group}/${entry}`);
     }
@@ -211,12 +202,9 @@ if (!existsSync(join(ROOT, INDEX_FILE))) {
   // Only the Rules section counts: the index file links a rule from other sections too, and a link
   // there does not put it in the index.
   const indexedRules = listedRules(rulesSection(claudeMd, RULES_HEADING)?.[0] ?? '');
-  const rulesDir = join(ROOT, '.claude', 'rules');
-  if (existsSync(rulesDir)) {
-    for (const entry of readdirSync(rulesDir).filter((f) => f.endsWith('.md'))) {
-      if (!indexedRules.has(`.claude/rules/${entry}`))
-        report('index', INDEX_FILE, 0, `rule missing from the ${RULES_HEADING} index: .claude/rules/${entry}`);
-    }
+  for (const entry of docsIn('.claude/rules')) {
+    if (!indexedRules.has(`.claude/rules/${entry}`))
+      report('index', INDEX_FILE, 0, `rule missing from the ${RULES_HEADING} index: .claude/rules/${entry}`);
   }
   for (const entry of indexedRules) {
     if (!existsSync(join(ROOT, entry)))
@@ -225,7 +213,7 @@ if (!existsSync(join(ROOT, INDEX_FILE))) {
 }
 
 // Reading the globs needs no git, so a key the parser cannot read fails even where git is missing.
-const covers = readCovers(ROOT, DOCS_DIR);
+const covers = readCovers(ROOT, config, LISTED);
 for (const { doc, globs } of covers) {
   if (globs.length === 0) report('covers', doc, 0, 'covers: declared, but no glob could be read from it');
 }
@@ -234,18 +222,7 @@ for (const { doc, globs } of covers) {
  * Tracked and untracked-but-not-ignored, so a doc written alongside a feature not yet added to git
  * passes; the existsSync drops a file deleted from disk but still in the index.
  */
-let repoFiles = null;
-try {
-  repoFiles = execFileSync('git', ['-C', ROOT, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
-    encoding: 'utf8',
-    maxBuffer: 8 * 1024 * 1024,
-    stdio: ['ignore', 'pipe', 'ignore'],
-  })
-    .split('\0')
-    .filter((file) => file && existsSync(join(ROOT, file)));
-} catch {
-  console.log('docs-check: git unavailable, covers globs not matched against files');
-}
+const repoFiles = LISTED?.filter((file) => existsSync(join(ROOT, file)));
 if (repoFiles) {
   for (const { doc, globs, patterns } of covers) {
     globs.forEach((glob, i) => {

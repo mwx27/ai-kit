@@ -4,9 +4,9 @@
 //
 // scripts/context-budget.mjs has its own matcher on purpose: it reproduces Claude Code's unanchored
 // `paths:` matching, so the two are different semantics, not a duplicate.
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { posixPath } from './posix-path.mjs';
+import { docSet } from './doc-set.mjs';
 
 const escapeRe = (c) => (/[.+^${}()|[\]\\]/.test(c) ? `\\${c}` : c);
 
@@ -55,15 +55,6 @@ function coversOf(text) {
   return globs;
 }
 
-function markdownFiles(dir) {
-  return readdirSync(dir).flatMap((entry) => {
-    const full = path.join(dir, entry);
-    if (!existsSync(full)) return []; // a symlink to nothing; docs-check reports it under `links`
-    if (statSync(full).isDirectory()) return markdownFiles(full);
-    return entry.endsWith('.md') ? [full] : [];
-  });
-}
-
 /**
  * A `covers:` key anywhere in a frontmatter block, CRLF included — what the doc meant to declare,
  * whether or not coversOf could read a glob out of it.
@@ -71,19 +62,17 @@ function markdownFiles(dir) {
 const declaresCovers = (text) => /^covers:/m.test(text.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? '');
 
 /**
- * Every doc in docsDir that declares `covers:`, with its globs compiled. `globs` is empty when the
- * key is there in a form coversOf does not read (CRLF, `covers: []`, a one-line value).
+ * Every doc in docsDir (core/doc-set.mjs: ignored ones left out) that declares `covers:`, with its
+ * globs compiled. `globs` is empty when the key is there in a form coversOf does not read (CRLF,
+ * `covers: []`, a one-line value). `listed` is listRepoFiles(root), for a caller that has it.
  */
-export function readCovers(root, docsDir) {
-  const dir = path.join(root, docsDir);
-  if (!existsSync(dir)) return [];
-
-  return markdownFiles(dir)
-    .map((file) => {
-      const text = readFileSync(file, 'utf8');
+export function readCovers(root, config, listed) {
+  return docSet(root, config, { dirs: [config.docsDir], files: [] }, listed)
+    .docs.map((doc) => {
+      const text = readFileSync(path.join(root, doc), 'utf8');
       const globs = coversOf(text);
       return {
-        doc: posixPath(path.relative(root, file)),
+        doc,
         declared: globs.length > 0 || declaresCovers(text),
         globs,
         patterns: globs.map(globToRegExp),
