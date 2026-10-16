@@ -8,6 +8,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ## [0.1.7] — 2026-10-16
 
+### Added
+
+- **`honest-docs-check` reports a line number in a doc.** A backticked `src/api.ts:42` (or `:12-30`, `:43,60`) and a link to `#L12` fail until the doc names the file, a symbol or a heading instead: line numbers move with every edit, so such a pointer goes stale without anyone noticing. Nothing is rewritten for you. A pointer to a file that is gone is still reported as a missing path.
+
 ### Changed
 
 - **`honest-docs-check` and `honest-docs-grep` skip files git ignores.** A doc in an ignored folder, such as private notes or local examples, is no longer reported for broken links, a missing Last Updated line or a missing entry in the docs index, nor named by the doc reminder, so it never blocks anyone's stop. Without git both still read every file, and say they could not tell ignored ones apart; `honest-docs-grep` then searches instead of exiting 1.

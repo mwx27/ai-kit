@@ -381,6 +381,61 @@ test('without git the folders are walked on disk, ignored files included, and it
   assert.match(run.stderr, /^docs-check: 4 problem\(s\) in 6 files$/m);
 });
 
+const LINE_NUMBER = (kind, token) => `line number in a ${kind}: ${token} — name the file, a symbol or a heading instead`;
+
+for (const spec of ['12', '12-30', '43,60', '576/588']) {
+  test(`paths: a line number (:${spec}) on a repo path that exists`, (t) => {
+    const { root } = cleanProject(t);
+    edit(root, '_docs/tools/beta.md', (text) => `${text}\nSee \`src/alpha.ts:${spec}\`.\n`);
+    assertOnly(check(root), 'paths', `_docs/tools/beta.md:9  ${LINE_NUMBER('path', `src/alpha.ts:${spec}`)}`);
+  });
+}
+
+for (const token of ['src/alpha.ts:12:5', 'alpha.ts:12:5']) {
+  test(`paths: line:column on ${token.includes('/') ? 'a repo path' : 'a bare file name'} is a line number`, (t) => {
+    const { root } = cleanProject(t);
+    edit(root, '_docs/tools/beta.md', (text) => `${text}\nSee \`${token}\`.\n`);
+    assertOnly(check(root), 'paths', `_docs/tools/beta.md:9  ${LINE_NUMBER('path', token)}`);
+  });
+}
+
+test('paths: a line number on a repo path that is gone is a missing path, once', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, '_docs/tools/beta.md', (text) => `${text}\nSee \`src/gone.ts:12-30\`.\n`);
+  assertOnly(check(root), 'paths', '_docs/tools/beta.md:9  no such path: src/gone.ts');
+});
+
+test('paths: a line number on a bare file name the repo has', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, '_docs/tools/beta.md', (text) => `${text}\nSee \`alpha.ts:12\`.\n`);
+  assertOnly(check(root), 'paths', `_docs/tools/beta.md:9  ${LINE_NUMBER('path', 'alpha.ts:12')}`);
+});
+
+test('paths: a bare name no repo file has, and host:port tokens, are not reported', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, '_docs/tools/beta.md', (text) => `${text}\n\`gone.ts:12\`, \`localhost:8081\`, \`api.example.com:443\`.\n`);
+  const run = check(root);
+  assert.equal(run.status, 0, run.stderr);
+});
+
+for (const anchor of ['L12', 'L12-L30']) {
+  test(`anchors: a link to the line anchor #${anchor}`, (t) => {
+    const { root } = cleanProject(t);
+    edit(root, '_docs/tools/beta.md', (text) => `${text}\nSee [alpha](../../src/alpha.ts#${anchor}).\n`);
+    assertOnly(check(root), 'anchors', `_docs/tools/beta.md:9  ${LINE_NUMBER('link', `../../src/alpha.ts#${anchor}`)}`);
+  });
+}
+
+test('an ignored doc with a line number is not reported', (t) => {
+  const { root } = cleanProject(t);
+  writeFiles(root, {
+    '.gitignore': '_docs/priv/\n',
+    '_docs/priv/notes.md': '# Notes\n\n`src/alpha.ts:12`, [a](../../src/alpha.ts#L12)\n',
+  });
+  const run = check(root);
+  assert.equal(run.status, 0, run.stderr);
+});
+
 for (const [text, detail] of [
   ['{ not json', 'not valid JSON \\(.+\\)'],
   ['{ "guard": { "command": "bash scripts/guard.sh" } }', 'guard\\.command must be an array of strings, like .+'],
