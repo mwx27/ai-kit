@@ -3,9 +3,10 @@
 // Every key is optional. A project sets only what differs from the defaults below:
 //
 //   docsDir         the folder of docs that carry `covers:` and a Last Updated line
-//   undated         folders under docsDir exempt from the Last Updated check (e.g. a gitignored scratch)
+//   undated         folders under docsDir exempt from the Last Updated check (e.g. generated pages)
 //   scan            where docs-check and docs-grep look: `dirs` (default: docsDir, .claude/rules,
-//                   .claude/skills) and root-level `files`
+//                   .claude/skills) and root-level `files`; a file git ignores is never scanned
+//                   (core/doc-set.mjs)
 //   rootFiles       root-level file names docs-check verifies when a doc quotes one in backticks
 //   absentByDesign  paths a doc may name that a clean checkout does not have
 //   absentScripts   script names a doc runs (`npm run`, `pnpm run`, `yarn run`, `bun run`) while

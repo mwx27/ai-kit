@@ -67,7 +67,7 @@ export function reminder(input) {
   for (const file of moved.filter((file) => isDoc(file, docsDir))) reminders[file] = 'edited';
 
   const due = new Map();
-  for (const { doc, patterns } of readCovers(root, docsDir)) {
+  for (const { doc, patterns } of readCovers(root, config)) {
     if (reminders[doc]) continue;
     const files = moved.filter((file) => !isDoc(file, docsDir) && patterns.some((re) => re.test(file)));
     if (files.length === 0) continue;

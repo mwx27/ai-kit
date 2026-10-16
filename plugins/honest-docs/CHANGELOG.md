@@ -6,6 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.1.7] — 2026-10-16
+
+### Changed
+
+- **`honest-docs-check` and `honest-docs-grep` skip files git ignores.** A doc in an ignored folder, such as private notes or local examples, is no longer reported for broken links, a missing Last Updated line or a missing entry in the docs index, nor named by the doc reminder, so it never blocks anyone's stop. Without git both still read every file, and say they could not tell ignored ones apart; `honest-docs-grep` then searches instead of exiting 1.
+
+---
+
 ## [0.1.6] — 2026-10-13
 
 ### Fixed

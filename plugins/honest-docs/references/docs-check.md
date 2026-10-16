@@ -1,8 +1,8 @@
 # Docs check
 
 `honest-docs-check` (`<plugin_root>/scripts/docs-check.mjs`) answers one question about every
-Markdown file the config's `scan` names — by default the docs folder (`docsDir`, `_docs/`),
-`.claude/rules/`, `.claude/skills/`, `CLAUDE.md` and `README.md`: **does everything this text points
+Markdown file the config's `scan` names that git tracks or would track — by default the docs folder
+(`docsDir`, `_docs/`), `.claude/rules/`, `.claude/skills/`, `CLAUDE.md` and `README.md`: **does everything this text points
 at still exist?** Six checks ask that, a seventh, `updated`, that every doc carries the date line the
 Stop gate rewrites, and an eighth, `init`, that what `/honest-docs:init` wrote is current — file
 reads, regexes and two git calls, no dependencies, well under a second. The Stop gate runs it
@@ -12,6 +12,12 @@ check `docs` ([`hooks.md`](hooks.md#stop-gatemjs--stop)).
 The rule files are in scope for the same reason the docs are: they carry links and paths, they are
 read as instructions, and a rule pointing at a file that moved is worse than a doc doing it — the
 reader acts on it.
+
+A file git ignores is skipped by every check, the `index` and `covers` ones included, and by
+`honest-docs-grep`: an ignored doc is one person's notes, not the project's docs, and must never block
+anyone's turn. One list in `<plugin_root>/core/doc-set.mjs` serves them all. Without git — not a
+repo, no binary, a failing call — the folders are walked on disk as before, ignored files included,
+and one line says they could not be told apart.
 
 The rule half of `index` reads only the Rules section of the index file: other sections link rules
 as pointers, and a rule linked only there is still missing from the index.

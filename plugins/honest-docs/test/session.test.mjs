@@ -1,7 +1,7 @@
 // The session baseline (hooks/session-baseline.mjs) and the doc reminder (hooks/doc-reminder.mjs),
 // which reads the snapshot the baseline stores.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { git, readJson, runHook, tmpRepo } from './helpers.mjs';
@@ -82,6 +82,17 @@ test('reminder: names a doc when code it covers changes, once per doc per sessio
   assert.equal(p.toolUse().stdout, '');
   p.write('src/a.ts', '3\n');
   assert.equal(p.toolUse().stdout, '');
+});
+
+test('reminder: a doc git ignores is never named', (t) => {
+  const p = project(t);
+  p.write('.gitignore', '_docs/priv/\n');
+  mkdirSync(path.join(p.root, '_docs/priv'));
+  p.write('_docs/priv/notes.md', doc(['src/**']));
+  p.baseline();
+
+  p.write('src/a.ts', '2\n');
+  assert.equal(p.toolUse().output.systemMessage, 'docs: check _docs/features/alpha.md');
 });
 
 test('reminder: a deleted covered file is named as deleted', (t) => {

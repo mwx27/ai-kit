@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
 import { renderDocsRule } from '../core/init.mjs';
-import { PLUGIN_VERSION, fragment, fragmentVersion, runBin, tmpRepo, writeFiles } from './helpers.mjs';
+import { PLUGIN_VERSION, fragment, fragmentVersion, git, runBin, tmpRepo, writeFiles } from './helpers.mjs';
 
 const CHECKS = ['links', 'anchors', 'paths', 'scripts', 'index', 'covers', 'updated', 'init'];
 
@@ -312,6 +312,73 @@ test('links: a symlink to nothing in a scanned folder', (t) => {
     return;
   }
   assertOnly(check(root), 'links', '.claude/skills/gone  symlink to a file that does not exist');
+});
+
+test('links: a tracked symlink to nothing in a scanned folder', (t) => {
+  const { root } = cleanProject(t);
+  mkdirSync(path.join(root, '.claude/skills'));
+  try {
+    symlinkSync(path.join(root, 'nowhere'), path.join(root, '.claude/skills/gone'));
+  } catch (error) {
+    if (error.code !== 'EPERM') throw error;
+    t.skip(`symlinkSync: ${error.message}`);
+    return;
+  }
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'symlink');
+  assertOnly(check(root), 'links', '.claude/skills/gone  symlink to a file that does not exist');
+});
+
+/**
+ * One person's notes in the docs folder: a broken link, no Last Updated line, a covers glob that
+ * matches nothing, and a page in an index group the index does not list.
+ */
+const NOTES = {
+  '_docs/priv/notes.md': "---\ncovers:\n  - 'lib/**'\n---\n\n# Notes\n\nSee [gone](gone.md).\n",
+  '_docs/features/scratch.md': '# Scratch\n',
+};
+const NOTES_IGNORED = '_docs/priv/\n_docs/features/scratch.md\n';
+
+test('an ignored doc is not checked: no link, updated, covers or index problem', (t) => {
+  const { root } = cleanProject(t);
+  writeFiles(root, { ...NOTES, '.gitignore': NOTES_IGNORED });
+  const run = check(root);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, 'docs-check: 4 files, no problems\n');
+});
+
+for (const state of ['tracked', 'untracked']) {
+  test(`the same notes ${state} are checked like any doc`, (t) => {
+    const { root } = cleanProject(t);
+    writeFiles(root, NOTES);
+    if (state === 'tracked') {
+      git(root, 'add', '-A');
+      git(root, 'commit', '-q', '-m', 'notes');
+    }
+    const run = check(root);
+    assert.equal(run.status, 1);
+    for (const line of [
+      '_docs/priv/notes.md:8  no such file: gone.md',
+      '_docs/priv/notes.md  no **Last Updated:** line — add one under the H1, any date; the guard gate sets it',
+      '_docs/features/scratch.md  no **Last Updated:** line — add one under the H1, any date; the guard gate sets it',
+      '_docs/priv/notes.md  covers matches no file: lib/**',
+      'CLAUDE.md  page missing from the docs index: _docs/features/scratch.md',
+    ])
+      assert.ok(run.stderr.includes(`\n    ${line}\n`), `expected line "${line}" in:\n${run.stderr}`);
+    assert.match(run.stderr, /^docs-check: 5 problem\(s\) in 6 files$/m);
+  });
+}
+
+test('without git the folders are walked on disk, ignored files included, and it says so', (t) => {
+  const { root } = cleanProject(t);
+  writeFiles(root, { ...NOTES, '.gitignore': NOTES_IGNORED });
+  rmSync(path.join(root, '.git'), { recursive: true, force: true });
+  const run = check(root);
+  assert.equal(run.status, 1);
+  assert.match(run.stdout, /^docs-check: git unavailable, ignored files could not be told apart and covers globs not matched against files$/m);
+  assert.ok(run.stderr.includes('\n    _docs/priv/notes.md:8  no such file: gone.md\n'), run.stderr);
+  // Without git the covers globs are not matched, so 4 of the 5.
+  assert.match(run.stderr, /^docs-check: 4 problem\(s\) in 6 files$/m);
 });
 
 for (const [text, detail] of [
