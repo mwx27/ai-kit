@@ -27,12 +27,23 @@
 // it names, is replaced by the current one, so a changed docsDir reaches it; a line in other words
 // is the project's, left untouched, with a note saying so.
 //
+// Every doc in docsDir without a `**Last Updated:**` line gets one under its H1, dated by the author
+// date of its last commit — a rebase moves the committer date, not when the text was written — or
+// its mtime when it has none, so docs-check's `updated` passes on docs written before the plugin.
+// The file's mtime is set to that date: the Stop gate restamps a changed doc from its mtime, and
+// then writes the same line. Skipped, as docs-check skips them: the `undated` folders and files git
+// ignores. A doc with no H1 is left alone with a warning; one with two or more such lines too, and
+// docs-check reports it.
+//
 // Two things init warns about and does not stop for: a docsDir that does not exist, naming the
 // folders that do hold .md files; and a file it maintains that git ignores, which nobody else gets.
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE } from './config.mjs';
+import { docSet } from './doc-set.mjs';
 import { ignoredByGit } from './git-ignored.mjs';
+import { LAST_UPDATED_LINE, lastUpdatedLine } from './last-updated.mjs';
 import { PLUGIN_ROOT, pluginVersion } from './log.mjs';
 
 export const DOCS_RULE = '.claude/rules/docs.md';
@@ -175,6 +186,64 @@ function missingDocsDirWarning(root, config) {
   );
 }
 
+/** The author date of `file`'s last commit, or null for a file with no history (or no git). */
+function lastCommitDate(root, file) {
+  try {
+    const seconds = execFileSync('git', ['-C', root, 'log', '-1', '--format=%at', '--', file], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return seconds ? new Date(Number(seconds) * 1000) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `text` with `line` under its H1 and a blank line on either side, or null when it has no H1. A `#`
+ * line in frontmatter or a code fence is not one.
+ */
+function underH1(text, line) {
+  const lines = text.split('\n');
+  let fenced = false;
+  let front = lines[0] === '---';
+  const h1 = lines.findIndex((l, i) => {
+    if (front) {
+      if (i > 0 && l === '---') front = false;
+      return false;
+    }
+    if (/^(```|~~~)/.test(l)) fenced = !fenced;
+    return !fenced && /^# /.test(l);
+  });
+  if (h1 === -1) return null;
+  const rest = lines.slice(h1 + 1);
+  while (rest.length > 0 && rest[0].trim() === '') rest.shift();
+  return [...lines.slice(0, h1 + 1), '', line, '', ...rest].join('\n');
+}
+
+/** Writes (with the mtime to set), notes and warnings for the docs in docsDir with no date line. */
+function datedDocs(root, config) {
+  const undated = config.undated.map((dir) => `${dir.replace(/\/+$/, '')}/`);
+  const writes = [];
+  const notes = [];
+  const warnings = [];
+  for (const file of docSet(root, config, { dirs: [config.docsDir], files: [] }).docs) {
+    if (undated.some((dir) => file.startsWith(dir))) continue;
+    const text = readFileSync(path.join(root, file), 'utf8');
+    if (text.split('\n').some((l) => LAST_UPDATED_LINE.test(l))) continue;
+    const date = lastCommitDate(root, file) ?? statSync(path.join(root, file)).mtime;
+    const line = lastUpdatedLine(date, config.timeZone);
+    const dated = underH1(text, line);
+    if (dated === null) {
+      warnings.push(`${file} has no H1, so init added no **Last Updated:** line; add one under its title.`);
+      continue;
+    }
+    writes.push({ file, text: dated, mtime: date });
+    notes.push(`added ${line} to ${file}`);
+  }
+  return { writes, notes, warnings };
+}
+
 /** The version stamped in a docs.md, or null when its last line is not a stamp. */
 export function stampOf(text) {
   return text.trimEnd().split('\n').at(-1).match(STAMP)?.[1] ?? null;
@@ -203,6 +272,10 @@ export function planInit(root, config) {
     writes.push({ file: CONFIG_FILE, text: `${JSON.stringify(SKELETON, null, 2)}\n` });
   notes.push('honest-docs-check must report no problems: the Stop gate runs it over all docs on every change.');
   if (!config.guard.command) notes.push(`${CONFIG_FILE} sets no guard.command: the Stop gate runs honest-docs-check alone.`);
+  const dated = datedDocs(root, config);
+  writes.push(...dated.writes);
+  notes.push(...dated.notes);
+  warnings.push(...dated.warnings);
 
   const indexFile = config.index.file;
   const indexPath = path.join(root, indexFile);
@@ -256,9 +329,10 @@ export function planInit(root, config) {
 export function runInit(root, config) {
   const plan = planInit(root, config);
   if (plan.errors.length > 0) return plan;
-  for (const { file, text } of plan.writes) {
+  for (const { file, text, mtime } of plan.writes) {
     mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     writeFileSync(path.join(root, file), text);
+    if (mtime) utimesSync(path.join(root, file), new Date(), mtime);
   }
   const maintained = [DOCS_RULE, CONFIG_FILE, config.index.file].filter((file) => existsSync(path.join(root, file)));
   for (const { file, source } of ignoredByGit(root, maintained))

@@ -29,12 +29,14 @@ function stampTime(format, date) {
   return `${part.year}-${part.month}-${part.day} ${part.hour}:${part.minute} ${part.timeZoneName}`;
 }
 
+/** The line for `date` in `timeZone` (null = the system's): what the gate writes, and init too. */
+export const lastUpdatedLine = (date, timeZone) => `**Last Updated:** ${stampTime(formatter(timeZone), date)}`;
+
 /**
  * Stamps the `.md` files among `files` that carry the line, in `timeZone` (null = the system's);
  * returns the ones whose content changed.
  */
 export function stampLastUpdated(root, files, timeZone) {
-  const format = formatter(timeZone);
   const stamped = [];
   for (const file of files.filter((name) => name.endsWith('.md'))) {
     const abs = path.join(root, file);
@@ -43,7 +45,7 @@ export function stampLastUpdated(root, files, timeZone) {
     if (!match) continue;
 
     const { atime, mtime } = statSync(abs);
-    const stamp = `**Last Updated:** ${stampTime(format, mtime)}`;
+    const stamp = lastUpdatedLine(mtime, timeZone);
     if (match[0] === stamp) continue;
 
     writeFileSync(abs, text.replace(LAST_UPDATED_LINE, stamp));
