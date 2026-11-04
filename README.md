@@ -47,9 +47,9 @@ It is meant to run only in projects that opt in.
 
 3. Add `artifacts/` to `.gitignore`. The plugin keeps its working files in `artifacts/claude-hooks/` and `artifacts/logs/`; `stateDir` and `logDir` move them.
 
-4. Start a new session in the project and run `/honest-docs:init`. It writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md`. Run it again after every plugin update.
+4. Start a new session in the project and run `/honest-docs:init`. It writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md`, and adds a Last Updated line to each doc that has none. Run it again after every plugin update.
 
-5. Have the agent run `honest-docs-check` and fix what it reports. The end-of-turn check covers all the docs, so until this passes, every turn that changes anything is sent back to fix docs it never touched.
+5. `init` ends by running `honest-docs-check` and saying how many problems it found. If there are any, have the agent fix them: the end-of-turn check covers all the docs, so until they are fixed, every turn that changes anything is sent back to fix docs it never touched.
 
 The docs rule is the plugin's and is rewritten on every `init`. Rules only your project needs go in a rule file of your own, which the plugin never touches; [`references/instruction-channels.md`](plugins/honest-docs/references/instruction-channels.md#decisions) says how.
 
