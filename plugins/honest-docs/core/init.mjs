@@ -23,7 +23,9 @@
 // The rule also gets a line in index.file's Rules section (`## <index.rulesHeading>`), at the
 // section's end, so docs-check's `index` passes. Without that section init creates it, holding the
 // one line, right after the `## honest-docs` section, or at the end of the file when there is none.
-// A section that already lists the rule is left alone.
+// A section that already lists the rule keeps it where it stands: init's own line, whatever docsDir
+// it names, is replaced by the current one, so a changed docsDir reaches it; a line in other words
+// is the project's, left untouched, with a note saying so.
 //
 // Two things init warns about and does not stop for: a docsDir that does not exist, naming the
 // folders that do hold .md files; and a file it maintains that git ignores, which nobody else gets.
@@ -100,27 +102,43 @@ export const listedRules = (section) => new Set(section.match(/\.claude\/rules\/
 
 const rulesLine = (config) => `- [\`docs.md\`](${DOCS_RULE}) — \`${config.docsDir}/\`: what to write and what not to.`;
 
-/** `text` with the docs rule listed in its Rules section, the section created when there is none. */
-function withRulesLine(text, config) {
+/** rulesLine for any docsDir, spaces free: how init finds the line it wrote before docsDir changed. */
+const ownRulesLines = () =>
+  new RegExp(`^${escapeRe(rulesLine({ docsDir: '\0' })).replaceAll(' ', '[ \\t]+').replace('\0', '[^`\\n]+')}[ \\t]*$`, 'gm');
+
+/**
+ * `{ text, note }`: `text` with the docs rule listed in its Rules section, the section created when
+ * there is none; `note` says what init did to that section, if anything.
+ */
+function withRulesLine(text, config, indexFile) {
   const heading = config.index.rulesHeading;
   const line = rulesLine(config);
+  const where = `the "## ${heading}" section of ${indexFile}`;
+  const listed = `listed ${DOCS_RULE} in ${where}`;
   const section = rulesSection(text, heading);
   if (section) {
-    if (listedRules(section[0]).has(DOCS_RULE)) return text;
+    if (listedRules(section[0]).has(DOCS_RULE)) {
+      if (!ownRulesLines().test(section[0]))
+        return { text, note: `left the line linking ${DOCS_RULE} in ${where} untouched: it is not in the words init writes` };
+      const body = section[0].replace(ownRulesLines(), line);
+      if (body === section[0]) return { text };
+      const end = section.index + section[0].length;
+      return { text: text.slice(0, section.index) + body + text.slice(end), note: `updated the ${DOCS_RULE} line in ${where}` };
+    }
     const body = section[0].trimEnd();
     const end = section.index + body.length;
     // Straight after a list item it joins the list; after prose it needs a blank line to be one.
     const gap = /^\s*[-*] /.test(body.split('\n').at(-1)) ? '\n' : '\n\n';
-    return text.slice(0, end) + gap + line + text.slice(end);
+    return { text: text.slice(0, end) + gap + line + text.slice(end), note: listed };
   }
   const block = `## ${heading}\n\n${line}\n`;
   const own = text.match(new RegExp(`^${escapeRe(APPEND_HEADING)}[ \\t]*$`, 'm'));
   const next = own ? text.slice(own.index + own[0].length).search(/^#{1,2} /m) : -1;
   if (next !== -1) {
     const at = own.index + own[0].length + next;
-    return `${text.slice(0, at)}${block}\n${text.slice(at)}`;
+    return { text: `${text.slice(0, at)}${block}\n${text.slice(at)}`, note: listed };
   }
-  return text + (text === '' ? '' : text.endsWith('\n') ? '\n' : '\n\n') + block;
+  return { text: text + (text === '' ? '' : text.endsWith('\n') ? '\n' : '\n\n') + block, note: listed };
 }
 
 const DIR_LIST = 10;
@@ -224,11 +242,9 @@ export function planInit(root, config) {
         'move them anywhere in the file, init finds them by their words'
     );
   }
-  const listed = withRulesLine(text, config);
-  if (listed !== text) {
-    notes.push(`listed ${DOCS_RULE} in the "## ${config.index.rulesHeading}" section of ${indexFile}`);
-    text = listed;
-  }
+  const listed = withRulesLine(text, config, indexFile);
+  if (listed.note) notes.push(listed.note);
+  text = listed.text;
   if (text !== original) writes.push({ file: indexFile, text });
   return { writes, notes, warnings, errors };
 }
