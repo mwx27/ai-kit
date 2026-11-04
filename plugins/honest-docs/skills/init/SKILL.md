@@ -21,7 +21,9 @@ until you do.
 After a successful run, format the files it wrote the way the project formats Markdown. If the
 output says it appended fragments, tell the user where they went and that they can move them
 anywhere in `CLAUDE.md`. A `warning:` line — no docs folder, a file git ignores, a doc with no
-title — is for the user to decide on; do not change the config or `.gitignore` on your own.
+title — is for the user to decide on; do not change the config or `.gitignore` on your own. The
+last line is what `honest-docs-check` reports; when it counts problems, offer to fix them, since
+the Stop gate blocks until they are, but do not start before the user agrees.
 
 If it exits non-zero, it wrote nothing: a fragment is there twice, or after an earlier run it is
 gone or its words were edited by hand. Show the user the passage you take to be the fragment, if

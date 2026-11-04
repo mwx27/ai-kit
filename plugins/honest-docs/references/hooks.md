@@ -63,7 +63,7 @@ and a code change can falsify a path or a `covers:` glob as surely as a doc edit
 as check `docs` and the guard does not run. Without `guard.command`, docs-check is the whole gate:
 a pass logs `docs-check-only`. Because the gate checks all the docs, not only the changed ones,
 `honest-docs-check` must report no problems before the plugin is turned on in a project, or every
-turn blocks on docs it never touched.
+turn blocks on docs it never touched; `/honest-docs:init` ends by saying how many it reports.
 
 ### The guard contract
 

@@ -11,6 +11,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 ### Added
 
 - **`/honest-docs:init` dates the docs that have no Last Updated line.** Each doc in the docs folder without one gets it under its title, dated by the doc's last commit, or by the time the file was last saved when it was never committed, and init lists every doc it dated. Before, a project with docs older than the plugin started with one `honest-docs-check` problem per doc. Docs in an `undated` folder and files git ignores are left alone, and so is a doc with no title, which init names in a warning.
+- **`/honest-docs:init` ends with what `honest-docs-check` reports:** how many problems there are, and that the Stop gate blocks every turn that changes a file until they are fixed, or that there are none. You learn it right after setup, not from the first blocked turn. It replaces the general reminder that the check must pass.
 
 ### Changed
 
