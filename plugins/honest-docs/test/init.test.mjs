@@ -1,12 +1,13 @@
 // honest-docs-init (scripts/init.mjs → core/init.mjs): the first run, a second run, a fragment
 // rewrapped by hand and a fragment whose words changed.
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
 import { fragmentVersions, renderDocsRule } from '../core/init.mjs';
+import { lastUpdatedLine } from '../core/last-updated.mjs';
 import { PLUGIN_VERSION, fragment, fragmentVersion, git, runBin, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const HEAD = '# Project\n\n## CRITICAL\n\n- Keep it short.\n- ';
@@ -19,6 +20,9 @@ const TAIL = `\n\nProject line after the policy.\n\n## Rules\n\n${RULE_LINE}\n`;
 const claudeMd = (readLine, policy) => `${HEAD}${readLine}${MIDDLE}${policy}${TAIL}`;
 const before = () => claudeMd(fragment('read-line'), fragment('docs-policy', 'pre-0.1.0'));
 const after = () => claudeMd(fragment('read-line'), fragment('docs-policy'));
+
+/** A doc in _docs/ that init has nothing to add to. */
+const DATED_DOC = '# A\n\n**Last Updated:** 2026-01-01 10:00 CET\n';
 
 const init = (root) => runBin('honest-docs-init', [], { cwd: root });
 const read = (root, file) => readFileSync(path.join(root, file), 'utf8');
@@ -305,6 +309,70 @@ test('init fails on a fragment: the Rules line is not written either', (t) => {
   assert.equal(read(root, 'CLAUDE.md'), text);
 });
 
+// K2: a doc in docsDir without its Last Updated line gets one.
+
+const UTC = { '.claude/honest-docs.json': JSON.stringify({ timeZone: 'UTC' }) };
+const OLD = new Date('2020-05-06T07:08:00Z');
+
+test('a committed doc without a Last Updated line gets one dated by its last commit author date, under the H1', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), ...UTC, '_docs/features/a.md': '---\ncovers:\n  - x\n---\n\n# A\n\nBody.\n' });
+  // As after a rebase: written in 2019, committed now. The committer date is not when the text was
+  // written, and the mtime is neither.
+  git(root, 'commit', '-q', '--amend', '--no-edit', '--date', '2019-03-04T05:06:00Z');
+  assert.notEqual(git(root, 'log', '-1', '--format=%at'), git(root, 'log', '-1', '--format=%ct'));
+  utimesSync(path.join(root, '_docs/features/a.md'), OLD, OLD);
+  const committed = new Date(Number(git(root, 'log', '-1', '--format=%at')) * 1000);
+  const line = lastUpdatedLine(committed, 'UTC');
+  assert.equal(line, '**Last Updated:** 2019-03-04 05:06 UTC');
+
+  const run = init(root);
+  assert.equal(run.status, 0, run.stderr);
+  assert.ok(run.stdout.includes(`honest-docs-init: added ${line} to _docs/features/a.md\n`), run.stdout);
+  assert.equal(read(root, '_docs/features/a.md'), `---\ncovers:\n  - x\n---\n\n# A\n\n${line}\n\nBody.\n`);
+  // The Stop gate restamps a changed doc from its mtime, so the mtime carries the same date.
+  assert.equal(Math.floor(statSync(path.join(root, '_docs/features/a.md')).mtimeMs / 1000), committed.getTime() / 1000);
+  assert.doesNotMatch(init(root).stdout, /added/);
+});
+
+test('an uncommitted doc without a Last Updated line gets its mtime', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), ...UTC });
+  writeFiles(root, { '_docs/a.md': '# A\n' });
+  utimesSync(path.join(root, '_docs/a.md'), OLD, OLD);
+  const run = init(root);
+  assert.ok(run.stdout.includes('honest-docs-init: added **Last Updated:** 2020-05-06 07:08 UTC to _docs/a.md\n'), run.stdout);
+  assert.equal(read(root, '_docs/a.md'), '# A\n\n**Last Updated:** 2020-05-06 07:08 UTC\n');
+});
+
+test('no Last Updated line added in an undated folder, to an ignored file, or to a doc with two', (t) => {
+  const twice = '# T\n\n**Last Updated:** 2026-01-01 10:00 CET\n**Last Updated:** 2026-01-02 10:00 CET\n';
+  const { root } = tmpRepo(t, {
+    'CLAUDE.md': after(),
+    '.claude/honest-docs.json': JSON.stringify({ undated: ['_docs/gen'] }),
+    '.gitignore': '_docs/priv/\n',
+    '_docs/gen/g.md': '# G\n',
+    '_docs/twice.md': twice,
+  });
+  writeFiles(root, { '_docs/priv/p.md': '# P\n' });
+  const run = init(root);
+  assert.equal(run.status, 0, run.stderr);
+  assert.doesNotMatch(run.stdout, /added/);
+  assert.equal(read(root, '_docs/gen/g.md'), '# G\n');
+  assert.equal(read(root, '_docs/priv/p.md'), '# P\n');
+  assert.equal(read(root, '_docs/twice.md'), twice);
+});
+
+test('a doc without an H1 is left alone, with a warning naming it', (t) => {
+  const text = '---\ncovers:\n  - x\n---\n\n## Not a title\n\n```sh\n# a comment\n```\n';
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': text });
+  const run = init(root);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(
+    run.stderr,
+    'honest-docs-init: warning: _docs/a.md has no H1, so init added no **Last Updated:** line; add one under its title.\n'
+  );
+  assert.equal(read(root, '_docs/a.md'), text);
+});
+
 // P2: a docsDir that does not exist.
 
 const missingDocsDir = (folders) =>
@@ -341,7 +409,7 @@ test('docsDir missing: at most 10 folders named', (t) => {
 });
 
 test('docsDir there: no warning (old path)', (t) => {
-  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': '' });
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC });
   const run = init(root);
   assert.equal(run.status, 0);
   assert.equal(run.stderr, '');
@@ -350,7 +418,7 @@ test('docsDir there: no warning (old path)', (t) => {
 // P3: files init maintains that git ignores.
 
 test('a file init writes is gitignored: one warning per file, exit 0, still written', (t) => {
-  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': '', '.gitignore': '# local\n.claude/\n' });
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC, '.gitignore': '# local\n.claude/\n' });
   const run = init(root);
   assert.equal(run.status, 0);
   assert.equal(
@@ -364,7 +432,7 @@ test('a file init writes is gitignored: one warning per file, exit 0, still writ
 });
 
 test('a tracked file matching an ignore pattern, or one a negation re-includes, is not reported', (t) => {
-  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': '' });
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC });
   // Written after the commit, so CLAUDE.md is tracked though the pattern matches it.
   writeFiles(root, { '.gitignore': 'CLAUDE.md\n.claude/*\n!.claude/rules/\n!.claude/honest-docs.json\n' });
   const run = init(root);
@@ -373,7 +441,7 @@ test('a tracked file matching an ignore pattern, or one a negation re-includes, 
 });
 
 test('a negation in a core.excludesFile at an absolute path is not reported', (t) => {
-  const { dir, root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': '' });
+  const { dir, root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC });
   // Outside the repo and absolute, as a global excludes file is, and with a colon in its path: on
   // Windows the drive letter gives one, elsewhere the temp path has none, so the name carries it.
   const excludes = path.join(dir, process.platform === 'win32' ? 'gitignore_global' : 'global:gitignore');
@@ -389,7 +457,7 @@ test('a negation in a core.excludesFile at an absolute path is not reported', (t
 test('outside a git repo: no ignore check, no warning', (t) => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'honest-docs-nogit-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  writeFiles(dir, { 'CLAUDE.md': after(), '_docs/a.md': '', '.gitignore': '.claude/\n' });
+  writeFiles(dir, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC, '.gitignore': '.claude/\n' });
   const run = init(dir);
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stderr, '');

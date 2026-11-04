@@ -119,7 +119,8 @@ the user's editor count, and a doc that did not change since its last check keep
 alone would restamp every doc a branch switch rewrote. A `PostToolUse` hook on Edit|Write was
 rejected for missing both. A doc edited and committed with no agent turn in between is not stamped
 at all. A doc with no date line is never stamped, which is why docs-check requires one
-([`docs-check.md`](docs-check.md)).
+([`docs-check.md`](docs-check.md)) and `/honest-docs:init` adds one, dated by the doc's last commit,
+to each doc that lacks it (`<plugin_root>/core/init.mjs`).
 
 **The date comes from mtime, not the clock, and the write puts the mtime back** — because the
 `verified` map is per session. A second session in the same repo sees the first one's stamp as a

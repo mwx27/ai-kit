@@ -8,6 +8,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ## [Unreleased]
 
+### Added
+
+- **`/honest-docs:init` dates the docs that have no Last Updated line.** Each doc in the docs folder without one gets it under its title, dated by the doc's last commit, or by the time the file was last saved when it was never committed, and init lists every doc it dated. Before, a project with docs older than the plugin started with one `honest-docs-check` problem per doc. Docs in an `undated` folder and files git ignores are left alone, and so is a doc with no title, which init names in a warning.
+
 ### Changed
 
 - **`honest-docs-check` no longer reports a path git ignores.** A doc naming `artifacts/…`, where the plugin keeps its own state, passed on a fresh clone and failed after the first session, and again differently on a machine with other local files there. A backticked path or a link target that git ignores is now skipped whether or not it exists on disk, so the result is the same on every machine. Without git it is checked as before.

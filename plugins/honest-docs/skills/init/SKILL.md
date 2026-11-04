@@ -13,13 +13,15 @@ to that file), creates `.claude/honest-docs.json` only when the project has none
 in `CLAUDE.md` the `Read` line and the docs policy with their current versions, leaving the rest
 of the file as it is. On the first run it appends whichever of the two is missing under a
 `## honest-docs` heading at the end of `CLAUDE.md`. It lists the rule in the `CLAUDE.md` Rules
-section, creating one when there is none. Run it again after every plugin update;
-`honest-docs-check` reports `init` when an update changed the rule or a passage, until you do.
+section, creating one when there is none, and gives each doc in the docs folder that has no
+`**Last Updated:**` line one under its title, dated by its last commit. Run it again after every
+plugin update; `honest-docs-check` reports `init` when an update changed the rule or a passage,
+until you do.
 
 After a successful run, format the files it wrote the way the project formats Markdown. If the
 output says it appended fragments, tell the user where they went and that they can move them
-anywhere in `CLAUDE.md`. A `warning:` line — no docs folder, or a file git ignores — is for the
-user to decide on; do not change the config or `.gitignore` on your own.
+anywhere in `CLAUDE.md`. A `warning:` line — no docs folder, a file git ignores, a doc with no
+title — is for the user to decide on; do not change the config or `.gitignore` on your own.
 
 If it exits non-zero, it wrote nothing: a fragment is there twice, or after an earlier run it is
 gone or its words were edited by hand. Show the user the passage you take to be the fragment, if
