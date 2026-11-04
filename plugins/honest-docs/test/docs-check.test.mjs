@@ -381,6 +381,48 @@ test('without git the folders are walked on disk, ignored files included, and it
   assert.match(run.stderr, /^docs-check: 4 problem\(s\) in 6 files$/m);
 });
 
+/** A doc naming paths under `artifacts/`, which git ignores: the plugin writes its state there. */
+function artifactsProject(t, { onDisk }) {
+  const project = cleanProject(t);
+  writeFiles(project.root, { '.gitignore': 'artifacts/\n' });
+  if (onDisk) writeFiles(project.root, { 'artifacts/other.log': '' });
+  edit(
+    project.root,
+    '_docs/tools/beta.md',
+    (text) => `${text}\nState in \`artifacts/a/b.txt\`, \`artifacts/logs/\`, \`artifacts/a.log:3\`, [log](../../artifacts/x.log#L2).\n`
+  );
+  return project;
+}
+
+for (const onDisk of [false, true]) {
+  test(`paths and links git ignores are not reported, ${onDisk ? 'with' : 'without'} the folder on disk`, (t) => {
+    const { root } = artifactsProject(t, { onDisk });
+    const run = check(root);
+    assert.equal(run.status, 0, run.stderr);
+  });
+}
+
+test('a missing path git does not ignore is still reported beside an ignored one', (t) => {
+  const { root } = artifactsProject(t, { onDisk: true });
+  edit(root, '_docs/tools/beta.md', (text) => `${text}\nSee \`src/gone.ts\`.\n`);
+  assertOnly(check(root), 'paths', '_docs/tools/beta.md:11  no such path: src/gone.ts');
+});
+
+test('without git a path under an ignored folder on disk is reported as before', (t) => {
+  const { root } = artifactsProject(t, { onDisk: true });
+  rmSync(path.join(root, '.git'), { recursive: true, force: true });
+  const run = check(root);
+  assert.equal(run.status, 1);
+  for (const line of [
+    '_docs/tools/beta.md:9  no such file: ../../artifacts/x.log',
+    '_docs/tools/beta.md:9  no such path: artifacts/a/b.txt',
+    '_docs/tools/beta.md:9  no such path: artifacts/logs',
+    '_docs/tools/beta.md:9  no such path: artifacts/a.log',
+  ])
+    assert.ok(run.stderr.includes(`\n    ${line}\n`), `expected line "${line}" in:\n${run.stderr}`);
+  assert.match(run.stderr, /^docs-check: 4 problem\(s\) in 4 files$/m);
+});
+
 const LINE_NUMBER = (kind, token) => `line number in a ${kind}: ${token} — name the file, a symbol or a heading instead`;
 
 for (const spec of ['12', '12-30', '43,60', '576/588']) {
