@@ -12,6 +12,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 - **`honest-docs-check` no longer reports a path git ignores.** A doc naming `artifacts/…`, where the plugin keeps its own state, passed on a fresh clone and failed after the first session, and again differently on a machine with other local files there. A backticked path or a link target that git ignores is now skipped whether or not it exists on disk, so the result is the same on every machine. Without git it is checked as before.
 
+### Fixed
+
+- **`/honest-docs:init` updates its line for the docs rule in `CLAUDE.md`'s Rules section when the docs folder changes.** After moving `docsDir` from `_docs` to `docs`, the line still said `_docs/` while the rule said `docs/`. A line you wrote yourself that links the rule is left as it is, and init says so.
+
 ---
 
 ## [0.1.7] — 2026-10-16
