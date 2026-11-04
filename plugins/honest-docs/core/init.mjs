@@ -27,10 +27,10 @@
 //
 // Two things init warns about and does not stop for: a docsDir that does not exist, naming the
 // folders that do hold .md files; and a file it maintains that git ignores, which nobody else gets.
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE } from './config.mjs';
+import { ignoredByGit } from './git-ignored.mjs';
 import { PLUGIN_ROOT, pluginVersion } from './log.mjs';
 
 export const DOCS_RULE = '.claude/rules/docs.md';
@@ -155,35 +155,6 @@ function missingDocsDirWarning(root, config) {
     (shown.length > 0 ? `folders holding .md files: ${shown.join(', ')}. ` : 'no folder holds .md files. ') +
     `Set docsDir in ${CONFIG_FILE}, then run /honest-docs:init again.`
   );
-}
-
-/**
- * The files among `files` git ignores, `{ file, source }` with source `<file>:<line>:<pattern>`.
- * Empty without git or outside a repo. A tracked file is never reported: git commits it anyway.
- */
-export function ignoredByGit(root, files) {
-  let output;
-  try {
-    // -z needs --stdin. Its fields are NUL-separated, so a source path holding a colon (a Windows
-    // core.excludesFile, C:/…) cannot be misread.
-    output = execFileSync('git', ['-C', root, 'check-ignore', '-v', '-z', '--stdin'], {
-      encoding: 'utf8',
-      input: files.map((file) => `${file}\0`).join(''),
-      stdio: ['pipe', 'pipe', 'ignore'],
-    });
-  } catch {
-    // Exit 1 is "none ignored"; anything else (no git, no repo) means no check.
-    return [];
-  }
-  const fields = output.split('\0');
-  const ignored = [];
-  // Four fields per path: source, line, pattern, path.
-  for (let i = 0; i + 3 < fields.length; i += 4) {
-    const [source, line, pattern, file] = fields.slice(i, i + 4);
-    // With -v a negated pattern that matched is printed too, though the file is not ignored.
-    if (!pattern.startsWith('!')) ignored.push({ file, source: `${source}:${line}:${pattern}` });
-  }
-  return ignored;
 }
 
 /** The version stamped in a docs.md, or null when its last line is not a stamp. */

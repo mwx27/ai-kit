@@ -5,7 +5,7 @@ Markdown file the config's `scan` names that git tracks or would track — by de
 (`docsDir`, `_docs/`), `.claude/rules/`, `.claude/skills/`, `CLAUDE.md` and `README.md`: **does
 everything this text points at still exist?** Six checks ask that, a seventh, `updated`, that every
 doc carries the date line the Stop gate rewrites, and an eighth, `init`, that what
-`/honest-docs:init` wrote is current — file reads, regexes and two git calls, no dependencies, well
+`/honest-docs:init` wrote is current — file reads, regexes and three git calls, no dependencies, well
 under a second. The Stop gate runs it itself on every stop with changes to check, before the
 project's guard, and a failure blocks as check `docs` ([`hooks.md`](hooks.md#stop-gatemjs--stop)).
 
@@ -57,6 +57,12 @@ without git only the matching is skipped, with one line of output. The globs are
 by the same `<plugin_root>/core/doc-covers.mjs` as the doc reminder
 ([`hooks.md`](hooks.md#doc-remindermjs--posttooluse-on-editwritebash)).
 
+A path git ignores gets no verdict from `links`, `anchors` or `paths`, whether or not it is on disk,
+as an `absentByDesign` entry gets none: whether it exists depends on the machine. The plugin writes
+its own state under `artifacts/`, so without this a doc naming `artifacts/…` passed on a fresh clone
+and failed after the first session. The paths are asked in one `git check-ignore` call, which
+answers for paths that do not exist too; without git each one is checked as below.
+
 A backticked path that does not exist as written is tried as an import specifier before it is
 reported — with `.ts`, `.tsx`, `.js`, `.jsx` and `.mjs` appended, and as `<path>/index.<ext>` — so
 `hooks/useAnalytics` passes when `hooks/useAnalytics.ts` exists.
@@ -100,7 +106,7 @@ Both of these produced false reports before they were handled, and both will bit
 
 Bare filenames (`store.ts`, `PascalCase.tsx`) are conventions or folder-relative prose, and checking
 them produced sixty false reports against a clean tree. Only tokens holding a `/` whose first
-segment exists at the root are treated as paths, plus the root-level names listed in `rootFiles`
+segment exists at the root are treated as paths (then skipped if git ignores them, above), plus the root-level names listed in `rootFiles`
 (empty by default): a doc naming a root file that was never there is caught only when that name is
 on the list. One consequence: a bare `types/` in a table cell is not checked, because a single
 segment could belong to any folder.

@@ -5,10 +5,11 @@
 // and what it accepts as absent comes from .claude/honest-docs.json (core/config.mjs).
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { ConfigError, loadConfig, projectRoot } from '../core/config.mjs';
 import { readCovers } from '../core/doc-covers.mjs';
 import { docSet, listRepoFiles } from '../core/doc-set.mjs';
+import { ignoredByGit } from '../core/git-ignored.mjs';
 import { checkInit, listedRules, rulesSection } from '../core/init.mjs';
 import { LAST_UPDATED_LINE } from '../core/last-updated.mjs';
 import { logEvent } from '../core/log.mjs';
@@ -44,8 +45,13 @@ const ROOT_FILES = config.rootFiles;
 
 const UNDATED = config.undated.map((dir) => `${dir.replace(/\/+$/, '')}/`);
 
-const findings = [];
-const report = (check, file, line, message) => findings.push({ check, file, line, message });
+let findings = [];
+/**
+ * `target` is the repo path a links, anchors or paths finding is about, kept with the doc's trailing
+ * slash so a `logs/` pattern matches a folder that is not there: the finding is dropped at the end if
+ * git ignores it.
+ */
+const report = (check, file, line, message, target) => findings.push({ check, file, line, message, target });
 
 // One git call for the doc set (core/doc-set.mjs: ignored files are not docs) and the covers match.
 const LISTED = listRepoFiles(ROOT);
@@ -157,12 +163,13 @@ for (const doc of docs) {
       if (!raw || /^(https?:|mailto:)/.test(raw)) continue;
       const [target, anchor] = raw.split('#');
       const file = target ? resolve(dirname(doc), target) : doc;
+      const targetPath = posixPath(relative(ROOT, file)) + (target.endsWith('/') ? '/' : '');
       if (target && !existsSync(file)) {
-        if (!isAbsentByDesign(posixPath(relative(ROOT, file)))) report('links', rel, line, `no such file: ${target}`);
+        if (!isAbsentByDesign(targetPath)) report('links', rel, line, `no such file: ${target}`, targetPath);
         continue;
       }
       if (anchor && LINE_ANCHOR.test(anchor)) {
-        report('anchors', rel, line, lineNumber('link', raw));
+        report('anchors', rel, line, lineNumber('link', raw), targetPath);
         continue;
       }
       if (anchor && headings.has(file) && !headings.get(file).has(anchor)) {
@@ -186,9 +193,11 @@ for (const doc of docs) {
       // `localhost:8081` names no file in the repo.
       const isRepoFileName = lineSpec && !token.includes('/') && BASENAMES.has(token);
       if (!isRootFile && !isRepoPath && !isRepoFileName) continue;
+      // A bare file name is one git lists, so never one it ignores.
+      const target = isRepoFileName ? undefined : m[1].trim().endsWith('/') ? `${token}/` : token;
       if (!isRepoFileName && !existsSync(join(ROOT, token)) && !isAbsentByDesign(token) && !resolvesAsSpecifier(token))
-        report('paths', rel, line, `no such path: ${token}`);
-      else if (lineSpec) report('paths', rel, line, lineNumber('path', quoted));
+        report('paths', rel, line, `no such path: ${token}`, target);
+      else if (lineSpec) report('paths', rel, line, lineNumber('path', quoted), target);
     }
 
     for (const m of text.matchAll(RUN_SCRIPT)) {
@@ -197,6 +206,19 @@ for (const doc of docs) {
       report('scripts', rel, line, pkg ? `no npm script: ${name}` : `no npm script: ${name} — no package.json`);
     }
   });
+}
+
+/*
+ * A path git ignores exists on one machine and not on the next (the plugin's own `artifacts/` is
+ * there after the first session), so a doc naming one gets no verdict either way, as with
+ * absentByDesign. One call for all of them; a path outside the repo would fail it, and git cannot
+ * ignore one anyway. Without git (said above) every finding stands.
+ */
+if (LISTED) {
+  const inRepo = (p) => p !== '..' && !p.startsWith('../') && !isAbsolute(p);
+  const targets = [...new Set(findings.map((f) => f.target).filter((p) => p && inRepo(p)))];
+  const ignored = new Set(ignoredByGit(ROOT, targets).map((i) => i.file));
+  findings = findings.filter((f) => !ignored.has(f.target));
 }
 
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
