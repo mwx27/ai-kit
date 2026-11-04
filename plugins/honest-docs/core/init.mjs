@@ -270,7 +270,6 @@ export function planInit(root, config) {
 
   if (!existsSync(path.join(root, CONFIG_FILE)))
     writes.push({ file: CONFIG_FILE, text: `${JSON.stringify(SKELETON, null, 2)}\n` });
-  notes.push('honest-docs-check must report no problems: the Stop gate runs it over all docs on every change.');
   if (!config.guard.command) notes.push(`${CONFIG_FILE} sets no guard.command: the Stop gate runs honest-docs-check alone.`);
   const dated = datedDocs(root, config);
   writes.push(...dated.writes);
