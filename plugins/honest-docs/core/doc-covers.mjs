@@ -56,20 +56,21 @@ function coversOf(text) {
 }
 
 /**
- * A `covers:` key anywhere in a frontmatter block, CRLF included — what the doc meant to declare,
- * whether or not coversOf could read a glob out of it.
+ * A `covers:` key anywhere in a frontmatter block — what the doc meant to declare, whether or not
+ * coversOf could read a glob out of it.
  */
-const declaresCovers = (text) => /^covers:/m.test(text.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? '');
+const declaresCovers = (text) => /^covers:/m.test(text.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '');
 
 /**
  * Every doc in docsDir (core/doc-set.mjs: ignored ones left out) that declares `covers:`, with its
- * globs compiled. `globs` is empty when the key is there in a form coversOf does not read (CRLF,
- * `covers: []`, a one-line value). `listed` is listRepoFiles(root), for a caller that has it.
+ * globs compiled. `globs` is empty when the key is there in a form coversOf does not read
+ * (`covers: []`, a one-line value). The text is read with CRLF turned into LF, so a Windows checkout
+ * gives the same globs. `listed` is listRepoFiles(root), for a caller that has it.
  */
 export function readCovers(root, config, listed) {
   return docSet(root, config, { dirs: [config.docsDir], files: [] }, listed)
     .docs.map((doc) => {
-      const text = readFileSync(path.join(root, doc), 'utf8');
+      const text = readFileSync(path.join(root, doc), 'utf8').replace(/\r\n/g, '\n');
       const globs = coversOf(text);
       return {
         doc,
