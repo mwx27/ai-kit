@@ -512,3 +512,160 @@ for (const [text, detail] of [
     assert.match(run.stderr, new RegExp(`^docs-check: \\.claude/honest-docs\\.json: ${detail}\\n$`));
   });
 }
+
+const checkJson = (root) => runBin('honest-docs-check', ['--json'], { cwd: root });
+
+/** The problems --json reports, after asserting it exited 0 with nothing on stderr. */
+function jsonProblems(run) {
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stderr, '');
+  return JSON.parse(run.stdout).problems;
+}
+
+test('--json on a clean project: the file count and no problems, exit 0', (t) => {
+  const { root } = cleanProject(t);
+  const run = checkJson(root);
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout), { files: 4, problems: [] });
+});
+
+test('--json lists every finding with check, file, line, message, target and related, and exits 0', (t) => {
+  const { root } = cleanProject(t);
+  writeFiles(root, {
+    '_docs/tools/c.md': '---\ncovers: []\n---\n\n# C\n\n**Last Updated:** x\n',
+    '_docs/features/gamma.md': '# Gamma\n\n**Last Updated:** x\n',
+    '.claude/rules/extra.md': '# Extra\n',
+  });
+  edit(root, 'CLAUDE.md', (text) =>
+    text
+      .replace(`${fragment('docs-policy')}\n`, '')
+      .replace('- [Beta]', '- [Gone](_docs/tools/gone.md)\n- [Beta]')
+      .replace('- [docs](.claude/rules/docs.md)', '- [docs](.claude/rules/docs.md)\n- [x](.claude/rules/x.md)')
+  );
+  edit(root, '_docs/features/alpha.md', (text) =>
+    text.replace("  - 'src/**'", "  - 'src/**'\n  - 'lib/**'").replace('#details', '#nope') +
+      '[g](../gone.md) [l](../../src/alpha.ts#L3) [s](#nope)\n' +
+      '`src/gone.ts` `src/gonedir/` `src/alpha.ts:4` `alpha.ts:5` `npm run nope`\n'
+  );
+  edit(root, '_docs/tools/beta.md', (text) => text.replace('**Last Updated:** 2026-01-01 10:00 CET\n\n', ''));
+  edit(root, '.claude/rules/docs.md', (text) => text.replace('One fact, one home', 'One fact, two homes'));
+
+  const problems = jsonProblems(checkJson(root));
+  const lineNumber = (kind, token) => `line number in a ${kind}: ${token} — name the file, a symbol or a heading instead`;
+  const alpha = '_docs/features/alpha.md';
+  const p = (check, file, line, message, target, related) => ({ check, file, line, message, target, related });
+  assert.deepEqual(problems, [
+    p('links', 'CLAUDE.md', 9, 'no such file: _docs/tools/gone.md', '_docs/tools/gone.md', ['_docs/tools/gone.md']),
+    p('links', 'CLAUDE.md', 15, 'no such file: .claude/rules/x.md', '.claude/rules/x.md', ['.claude/rules/x.md']),
+    p('anchors', alpha, 11, 'no heading "#nope" in ../tools/beta.md', null, ['_docs/tools/beta.md']),
+    p('links', alpha, 12, 'no such file: ../gone.md', '_docs/gone.md', ['_docs/gone.md']),
+    p('anchors', alpha, 12, lineNumber('link', '../../src/alpha.ts#L3'), 'src/alpha.ts', []),
+    p('anchors', alpha, 12, 'no heading "#nope" in this file', null, [alpha]),
+    p('paths', alpha, 13, 'no such path: src/gone.ts', 'src/gone.ts', ['src/gone.ts']),
+    p('paths', alpha, 13, 'no such path: src/gonedir', 'src/gonedir/', ['src/gonedir']),
+    p('paths', alpha, 13, lineNumber('path', 'src/alpha.ts:4'), 'src/alpha.ts', []),
+    p('paths', alpha, 13, lineNumber('path', 'alpha.ts:5'), null, []),
+    p('scripts', alpha, 13, 'no npm script: nope', null, ['package.json']),
+    p('updated', '_docs/tools/beta.md', 0, 'no **Last Updated:** line — add one under the H1, any date; the guard gate sets it', null, []),
+    p('index', 'CLAUDE.md', 0, 'page missing from the docs index: _docs/features/gamma.md', null, ['_docs/features/gamma.md']),
+    p('index', 'CLAUDE.md', 0, 'page missing from the docs index: _docs/tools/c.md', null, ['_docs/tools/c.md']),
+    p('index', 'CLAUDE.md', 0, 'docs index lists a page that is gone: _docs/tools/gone.md', null, ['_docs/tools/gone.md']),
+    p('index', 'CLAUDE.md', 0, 'rule missing from the Rules index: .claude/rules/extra.md', null, ['.claude/rules/extra.md']),
+    p('index', 'CLAUDE.md', 0, 'Rules index lists a rule that is gone: .claude/rules/x.md', null, ['.claude/rules/x.md']),
+    p('covers', '_docs/tools/c.md', 0, 'covers: declared, but no glob could be read from it', null, []),
+    p('covers', alpha, 0, 'covers matches no file: lib/**', null, []),
+    p('init', '.claude/rules/docs.md', 0, 'differs from the rule this plugin writes — run /honest-docs:init', null, ['.claude/honest-docs.json']),
+    p('init', 'CLAUDE.md', 0, `no ${fragmentVersion('docs-policy')} docs-policy fragment — run /honest-docs:init`, null, []),
+  ]);
+
+  // The same problems as the text output, which is unchanged.
+  const text = check(root);
+  assert.equal(text.status, 1);
+  for (const f of problems) assert.ok(text.stderr.includes(`\n    ${f.file}${f.line ? `:${f.line}` : ''}  ${f.message}\n`), f.message);
+  assert.match(text.stderr, new RegExp(`^docs-check: ${problems.length} problem\\(s\\) in 7 files$`, 'm'));
+});
+
+test('related: a missing heading names the page that should hold it', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, '_docs/features/alpha.md', (text) => text.replace('#details', '#nope'));
+  const [problem] = jsonProblems(checkJson(root));
+  assert.equal(problem.message, 'no heading "#nope" in ../tools/beta.md');
+  assert.deepEqual(problem.related, ['_docs/tools/beta.md']);
+});
+
+test('related: a scripts finding names package.json, even when git ignores it', (t) => {
+  const { root } = cleanProject(t);
+  writeFiles(root, { '.gitignore': 'package.json\n' });
+  edit(root, '_docs/features/alpha.md', (text) => text.replace('npm run test', 'npm run nope'));
+  const [problem] = jsonProblems(checkJson(root));
+  assert.equal(problem.message, 'no npm script: nope');
+  assert.deepEqual(problem.related, ['package.json']);
+});
+
+test('related: a page missing from the index names the page', (t) => {
+  const { root } = cleanProject(t);
+  writeFiles(root, { '_docs/features/gamma.md': BETA.replace('Beta', 'Gamma') });
+  const [problem] = jsonProblems(checkJson(root));
+  assert.equal(problem.message, 'page missing from the docs index: _docs/features/gamma.md');
+  assert.deepEqual(problem.related, ['_docs/features/gamma.md']);
+});
+
+test('related: no index file names nothing, a missing docs rule names the config', (t) => {
+  const { root } = cleanProject(t);
+  rmSync(path.join(root, 'CLAUDE.md'));
+  rmSync(path.join(root, '.claude/rules/docs.md'));
+  const problems = jsonProblems(checkJson(root));
+  assert.deepEqual(
+    problems.map(({ check, file, related }) => ({ check, file, related })),
+    [
+      { check: 'index', file: 'CLAUDE.md', related: [] },
+      { check: 'init', file: '.claude/rules/docs.md', related: ['.claude/honest-docs.json'] },
+      { check: 'init', file: 'CLAUDE.md', related: [] },
+      { check: 'init', file: 'CLAUDE.md', related: [] },
+    ]
+  );
+});
+
+test('related: a symlink to nothing names what it pointed at, when that is in the repo', (t) => {
+  const { root, dir } = cleanProject(t);
+  mkdirSync(path.join(root, '.claude/skills'));
+  try {
+    symlinkSync('../../src/gone.ts', path.join(root, '.claude/skills/inside'));
+    symlinkSync(path.join(dir, 'outside'), path.join(root, '.claude/skills/outside'));
+  } catch (error) {
+    if (error.code !== 'EPERM') throw error;
+    t.skip(`symlinkSync: ${error.message}`);
+    return;
+  }
+  assert.deepEqual(
+    jsonProblems(checkJson(root)).map(({ file, related }) => ({ file, related })),
+    [
+      { file: '.claude/skills/inside', related: ['src/gone.ts'] },
+      { file: '.claude/skills/outside', related: [] },
+    ]
+  );
+});
+
+test('--json with a broken config: exit 2 with one line naming the file, nothing on stdout', (t) => {
+  const { root } = cleanProject(t);
+  writeFiles(root, { '.claude/honest-docs.json': '{ not json' });
+  const run = checkJson(root);
+  assert.equal(run.status, 2);
+  assert.equal(run.stdout, '');
+  assert.match(run.stderr, /^docs-check: \.claude\/honest-docs\.json: not valid JSON \(.+\)\n$/);
+});
+
+test('--json without git: stdout is only the JSON, the git line goes to stderr', (t) => {
+  const { root } = cleanProject(t);
+  rmSync(path.join(root, '.git'), { recursive: true, force: true });
+  const run = checkJson(root);
+  assert.equal(run.status, 0);
+  assert.match(run.stderr, /^docs-check: git unavailable/);
+  assert.deepEqual(JSON.parse(run.stdout), { files: 4, problems: [] });
+});
+
+test('--json prints a long list whole through a pipe', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, '_docs/features/alpha.md', (text) => text + '[gone](../gone-with-a-long-name-to-fill-the-pipe.md)\n'.repeat(3000));
+  assert.equal(jsonProblems(checkJson(root)).length, 3000);
+});
