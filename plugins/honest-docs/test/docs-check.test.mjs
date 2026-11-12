@@ -201,6 +201,24 @@ test('covers: a key no glob can be read from', (t) => {
   assertOnly(check(root), 'covers', '_docs/features/alpha.md  covers: declared, but no glob could be read from it');
 });
 
+/** The doc with every line ending turned into CRLF, as a Windows checkout with core.autocrlf writes it. */
+const toCrlf = (root, file) => edit(root, file, (text) => text.replace(/\r?\n/g, '\r\n'));
+
+for (const [what, glob] of [
+  ['a glob that matches', 'src/**'],
+  ['a glob that matches nothing', 'lib/**'],
+]) {
+  test(`covers: a CRLF doc gives the same findings as its LF copy, ${what}`, (t) => {
+    const { root } = cleanProject(t);
+    edit(root, '_docs/features/alpha.md', (text) => text.replace("'src/**'", `'${glob}'`));
+    const lf = check(root);
+    toCrlf(root, '_docs/features/alpha.md');
+    assert.deepEqual(check(root), lf);
+    if (glob === 'src/**') assert.equal(lf.status, 0, lf.stderr);
+    else assertOnly(lf, 'covers', `_docs/features/alpha.md  covers matches no file: ${glob}`);
+  });
+}
+
 test('updated: a doc in _docs/ without its Last Updated line', (t) => {
   const { root } = cleanProject(t);
   edit(root, '_docs/tools/beta.md', (text) => text.replace('**Last Updated:** 2026-01-01 10:00 CET\n\n', ''));
