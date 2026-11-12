@@ -346,7 +346,8 @@ export function runInit(root, config) {
 const ruleWords = (text) => words(text.trimEnd().split('\n').slice(0, -1).join('\n')).join(' ');
 
 /**
- * What docs-check reports as `init`: `{ file, message }` per problem. It compares text, not version
+ * What docs-check reports as `init`: `{ file, message, related }` per problem, `related` the other
+ * files whose change can cause it (the config renders the rule). It compares text, not version
  * numbers, so a plugin update that changes neither the rule nor a fragment reports nothing.
  */
 export function checkInit(root, config) {
@@ -354,9 +355,13 @@ export function checkInit(root, config) {
   const rerun = 'run /honest-docs:init';
   const rulePath = path.join(root, DOCS_RULE);
   if (!existsSync(rulePath)) {
-    problems.push({ file: DOCS_RULE, message: `missing — ${rerun}` });
+    problems.push({ file: DOCS_RULE, message: `missing — ${rerun}`, related: [CONFIG_FILE] });
   } else if (ruleWords(readFileSync(rulePath, 'utf8')) !== ruleWords(renderDocsRule(config))) {
-    problems.push({ file: DOCS_RULE, message: `differs from the rule this plugin writes — ${rerun}` });
+    problems.push({
+      file: DOCS_RULE,
+      message: `differs from the rule this plugin writes — ${rerun}`,
+      related: [CONFIG_FILE],
+    });
   }
 
   const indexFile = config.index.file;
@@ -368,6 +373,7 @@ export function checkInit(root, config) {
     if (found !== 1)
       problems.push({
         file: indexFile,
+        related: [],
         message:
           found === 0
             ? `no ${current.version} ${name} fragment — ${rerun}`

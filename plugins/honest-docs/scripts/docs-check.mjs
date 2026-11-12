@@ -3,8 +3,11 @@
 // docs index, `covers:` globs, the Last Updated line and what /honest-docs:init wrote. Run as
 // `honest-docs-check` (bin/), or by the project's guard through $HONEST_DOCS_SCRIPTS. What it scans
 // and what it accepts as absent comes from .claude/honest-docs.json (core/config.mjs).
+//
+// `--json` prints `{ files, problems: [{ check, file, line, message, target, related }] }` on stdout
+// instead, for a program to read, and exits 0 whatever it found; a broken config still exits 2.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readlinkSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { ConfigError, loadConfig, projectRoot } from '../core/config.mjs';
 import { readCovers } from '../core/doc-covers.mjs';
@@ -15,6 +18,7 @@ import { LAST_UPDATED_LINE } from '../core/last-updated.mjs';
 import { logEvent } from '../core/log.mjs';
 import { posixPath } from '../core/posix-path.mjs';
 
+const JSON_OUTPUT = process.argv.slice(2).includes('--json');
 const ROOT = projectRoot();
 let config;
 try {
@@ -49,16 +53,31 @@ let findings = [];
 /**
  * `target` is the repo path a links, anchors or paths finding is about, kept with the doc's trailing
  * slash so a `logs/` pattern matches a folder that is not there: the finding is dropped at the end if
- * git ignores it.
+ * git ignores it. That is its only job.
+ *
+ * `related` are the repo paths besides `file` whose change can cause the finding — a link's target,
+ * package.json for a script — so a caller can tell whether a change it knows of caused it. Kept apart
+ * from `target`: a cause git ignores (package.json in some repos) must not drop the finding.
  */
-const report = (check, file, line, message, target) => findings.push({ check, file, line, message, target });
+const report = (check, file, line, message, { target, related = [] } = {}) =>
+  findings.push({ check, file, line, message, target, related });
+
+const inRepo = (p) => p !== '..' && !p.startsWith('../') && !isAbsolute(p);
 
 // One git call for the doc set (core/doc-set.mjs: ignored files are not docs) and the covers match.
 const LISTED = listRepoFiles(ROOT);
-if (!LISTED) console.log('docs-check: git unavailable, ignored files could not be told apart and covers globs not matched against files');
+// On stderr with --json, where stdout carries only the JSON.
+if (!LISTED)
+  (JSON_OUTPUT ? console.error : console.log)(
+    'docs-check: git unavailable, ignored files could not be told apart and covers globs not matched against files'
+  );
 
 const scanned = docSet(ROOT, config, undefined, LISTED);
-for (const file of scanned.dangling) report('links', file, 0, 'symlink to a file that does not exist');
+for (const file of scanned.dangling) {
+  // What the link pointed at, when that is in the repo: deleting or renaming it is what broke the link.
+  const pointed = posixPath(relative(ROOT, resolve(ROOT, dirname(file), readlinkSync(join(ROOT, file)))));
+  report('links', file, 0, 'symlink to a file that does not exist', { related: inRepo(pointed) ? [pointed] : [] });
+}
 const docs = scanned.docs.map((doc) => join(ROOT, doc));
 
 /** File names in the repo, so a bare `store.ts:12` is known to name a file; without git none is. */
@@ -165,15 +184,18 @@ for (const doc of docs) {
       const file = target ? resolve(dirname(doc), target) : doc;
       const targetPath = posixPath(relative(ROOT, file)) + (target.endsWith('/') ? '/' : '');
       if (target && !existsSync(file)) {
-        if (!isAbsentByDesign(targetPath)) report('links', rel, line, `no such file: ${target}`, targetPath);
+        if (!isAbsentByDesign(targetPath))
+          report('links', rel, line, `no such file: ${target}`, { target: targetPath, related: [targetPath] });
         continue;
       }
       if (anchor && LINE_ANCHOR.test(anchor)) {
-        report('anchors', rel, line, lineNumber('link', raw), targetPath);
+        report('anchors', rel, line, lineNumber('link', raw), { target: targetPath });
         continue;
       }
       if (anchor && headings.has(file) && !headings.get(file).has(anchor)) {
-        report('anchors', rel, line, `no heading "#${anchor}" in ${target || 'this file'}`);
+        report('anchors', rel, line, `no heading "#${anchor}" in ${target || 'this file'}`, {
+          related: [targetPath],
+        });
       }
     }
 
@@ -196,14 +218,16 @@ for (const doc of docs) {
       // A bare file name is one git lists, so never one it ignores.
       const target = isRepoFileName ? undefined : m[1].trim().endsWith('/') ? `${token}/` : token;
       if (!isRepoFileName && !existsSync(join(ROOT, token)) && !isAbsentByDesign(token) && !resolvesAsSpecifier(token))
-        report('paths', rel, line, `no such path: ${token}`, target);
-      else if (lineSpec) report('paths', rel, line, lineNumber('path', quoted), target);
+        report('paths', rel, line, `no such path: ${token}`, { target, related: [token] });
+      else if (lineSpec) report('paths', rel, line, lineNumber('path', quoted), { target });
     }
 
     for (const m of text.matchAll(RUN_SCRIPT)) {
       const [, , name, glob] = m;
       if (glob || ABSENT_SCRIPTS.includes(name) || pkg?.scripts?.[name]) continue;
-      report('scripts', rel, line, pkg ? `no npm script: ${name}` : `no npm script: ${name} — no package.json`);
+      report('scripts', rel, line, pkg ? `no npm script: ${name}` : `no npm script: ${name} — no package.json`, {
+        related: ['package.json'],
+      });
     }
   });
 }
@@ -215,7 +239,6 @@ for (const doc of docs) {
  * ignore one anyway. Without git (said above) every finding stands.
  */
 if (LISTED) {
-  const inRepo = (p) => p !== '..' && !p.startsWith('../') && !isAbsolute(p);
   const targets = [...new Set(findings.map((f) => f.target).filter((p) => p && inRepo(p)))];
   const ignored = new Set(ignoredByGit(ROOT, targets).map((i) => i.file));
   findings = findings.filter((f) => !ignored.has(f.target));
@@ -236,24 +259,26 @@ if (!existsSync(join(ROOT, INDEX_FILE))) {
   const indexed = new Set(INDEX_GROUPS.length > 0 ? (claudeMd.match(indexPattern) ?? []) : []);
   for (const group of INDEX_GROUPS) {
     for (const entry of docsIn(`${DOCS_DIR}/${group}`)) {
-      if (!indexed.has(`${DOCS_DIR}/${group}/${entry}`))
-        report('index', INDEX_FILE, 0, `page missing from the docs index: ${DOCS_DIR}/${group}/${entry}`);
+      const page = `${DOCS_DIR}/${group}/${entry}`;
+      if (!indexed.has(page)) report('index', INDEX_FILE, 0, `page missing from the docs index: ${page}`, { related: [page] });
     }
   }
   for (const entry of indexed) {
-    if (!existsSync(join(ROOT, entry))) report('index', INDEX_FILE, 0, `docs index lists a page that is gone: ${entry}`);
+    if (!existsSync(join(ROOT, entry)))
+      report('index', INDEX_FILE, 0, `docs index lists a page that is gone: ${entry}`, { related: [entry] });
   }
 
   // Only the Rules section counts: the index file links a rule from other sections too, and a link
   // there does not put it in the index.
   const indexedRules = listedRules(rulesSection(claudeMd, RULES_HEADING)?.[0] ?? '');
   for (const entry of docsIn('.claude/rules')) {
-    if (!indexedRules.has(`.claude/rules/${entry}`))
-      report('index', INDEX_FILE, 0, `rule missing from the ${RULES_HEADING} index: .claude/rules/${entry}`);
+    const rule = `.claude/rules/${entry}`;
+    if (!indexedRules.has(rule))
+      report('index', INDEX_FILE, 0, `rule missing from the ${RULES_HEADING} index: ${rule}`, { related: [rule] });
   }
   for (const entry of indexedRules) {
     if (!existsSync(join(ROOT, entry)))
-      report('index', INDEX_FILE, 0, `${RULES_HEADING} index lists a rule that is gone: ${entry}`);
+      report('index', INDEX_FILE, 0, `${RULES_HEADING} index lists a rule that is gone: ${entry}`, { related: [entry] });
   }
 }
 
@@ -278,7 +303,7 @@ if (repoFiles) {
 }
 
 // The docs rule stamped with this plugin version, and the current CLAUDE.md fragments.
-for (const { file, message } of checkInit(ROOT, config)) report('init', file, 0, message);
+for (const { file, message, related } of checkInit(ROOT, config)) report('init', file, 0, message, { related });
 
 const CHECKS = ['links', 'anchors', 'paths', 'scripts', 'index', 'covers', 'updated', 'init'];
 logEvent(ROOT, 'docs-check', {
@@ -289,15 +314,22 @@ logEvent(ROOT, 'docs-check', {
   ),
 });
 
-if (findings.length === 0) {
-  console.log(`docs-check: ${docs.length} files, no problems`);
-  process.exit(0);
+if (JSON_OUTPUT) {
+  // No process.exit() here: on macOS a pipe is written asynchronously, and exiting would cut a long
+  // list short. The exit code is 0 whatever was found; the caller reads the problems.
+  const problems = findings.map((f) => ({ ...f, target: f.target ?? null }));
+  console.log(JSON.stringify({ files: docs.length, problems }));
+} else {
+  if (findings.length === 0) {
+    console.log(`docs-check: ${docs.length} files, no problems`);
+    process.exit(0);
+  }
+  for (const check of CHECKS) {
+    const group = findings.filter((f) => f.check === check);
+    if (!group.length) continue;
+    console.error(`\n  ${check} (${group.length})`);
+    for (const f of group) console.error(`    ${f.file}${f.line ? `:${f.line}` : ''}  ${f.message}`);
+  }
+  console.error(`\ndocs-check: ${findings.length} problem(s) in ${docs.length} files\n`);
+  process.exit(1);
 }
-for (const check of CHECKS) {
-  const group = findings.filter((f) => f.check === check);
-  if (!group.length) continue;
-  console.error(`\n  ${check} (${group.length})`);
-  for (const f of group) console.error(`    ${f.file}${f.line ? `:${f.line}` : ''}  ${f.message}`);
-}
-console.error(`\ndocs-check: ${findings.length} problem(s) in ${docs.length} files\n`);
-process.exit(1);
