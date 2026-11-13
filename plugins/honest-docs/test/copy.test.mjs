@@ -8,10 +8,10 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { hookRoot } from '../core/root.mjs';
 import { installedVersion } from '../core/version.mjs';
-import { PLUGIN_ROOT, PLUGIN_VERSION, cleanEnv, eventLog, git, runBin, runHook, tmpRepo, writeFiles } from './helpers.mjs';
+import { PLUGIN_ROOT, PLUGIN_VERSION, agentSession, attributedLines, cleanEnv, eventLog, git, runBin, runHook, tmpRepo, writeFiles } from './helpers.mjs';
 
 const COPY = '.claude/honest-docs';
-const HOOKS = ['session-baseline', 'doc-reminder', 'instructions-log', 'stop-gate'];
+const HOOKS = ['session-start', 'pre-tool', 'post-tool', 'instructions-log', 'stop-gate'];
 
 /** What /honest-docs:init will copy (impl plan 1.8), and a manifest naming `version`, or none. */
 function installCopy(root, { version = '0.2.0' } = {}) {
@@ -53,11 +53,16 @@ function runCopyHook(copy, hook, payload, { projectDir }) {
 /** A payload for `hook` that would make it write something, with `cwd`. */
 const payload = (hook, cwd) =>
   ({
-    'session-baseline': { session_id: 's', cwd, source: 'startup' },
-    'doc-reminder': { session_id: 's', cwd, tool_name: 'Edit' },
+    'session-start': { session_id: 's', cwd, source: 'startup' },
+    'pre-tool': { session_id: 's', cwd, tool_name: 'Bash', tool_use_id: 'toolu_1', tool_input: { command: 'x' } },
+    'post-tool': { session_id: 's', cwd, tool_name: 'Write', tool_use_id: 'toolu_2', tool_input: { file_path: path.join(cwd, 'src/a.ts') } },
     'instructions-log': { session_id: 's', cwd, hook_event_name: 'InstructionsLoaded', file_path: path.join(cwd, 'CLAUDE.md'), load_reason: 'session_start' },
     'stop-gate': { session_id: 's', cwd, permission_mode: 'default' },
   })[hook];
+
+/** A session whose hooks are the copy's, run for the project at `projectDir`, in `cwd`. */
+const copySession = (copy, projectDir, cwd = projectDir) =>
+  agentSession(cwd, 's', { cwd, run: (hook, input) => runCopyHook(copy, hook, input, { projectDir }) });
 
 /** Every path in `root` git does not track, ignored ones included: what a hook wrote. */
 const untracked = (root) => git(root, 'status', '--porcelain', '--ignored', '--untracked-files=all');
@@ -110,16 +115,21 @@ test('the copy gate runs the copy docs-check and hands the guard the copy script
   writeFiles(dir, {
     'guard.cjs': `require('node:fs').writeFileSync(${JSON.stringify(record)}, process.env.HONEST_DOCS_SCRIPTS + ' ' + process.env.HONEST_DOCS_HOOK);\n`,
   });
-  writeFiles(root, { '.claude/honest-docs.json': JSON.stringify({ guard: { command: ['node', guard] } }), 'src/a.ts': '1\n' });
+  const session = copySession(copy, root);
+  session.write('.claude/honest-docs.json', JSON.stringify({ guard: { command: ['node', guard] } }));
+  session.write('src/a.ts', '1\n');
   // The copy is the plugin's own folder: a file there is never a change to check.
-  writeFiles(copy, { 'scratch.txt': 'x\n' });
+  session.write('.claude/honest-docs/scratch.txt', 'x\n');
 
   const run = runCopyHook(copy, 'stop-gate', payload('stop-gate', root), { projectDir: root });
   assert.equal(run.status, 0, run.stderr);
   // The config and src/a.ts.
   assert.match(JSON.parse(run.stdout).systemMessage, /^docs-check, guard --changed: 2 files, /);
   assert.equal(readFileSync(record, 'utf8'), `${path.join(copy, 'scripts')} 1`);
-  assert.deepEqual(eventLog(root).map((e) => [e.event, e.pluginVersion]), [['docs-check', '0.2.0'], ['gate', '0.2.0']]);
+  assert.deepEqual(
+    eventLog(root).map((e) => [e.event, e.pluginVersion]),
+    [['attribution', '0.2.0'], ['attribution', '0.2.0'], ['docs-check', '0.2.0'], ['gate', '0.2.0']]
+  );
 });
 
 test('hookRoot from a copy: a folder in a worktree resolves to the worktree root', (t) => {
@@ -170,4 +180,41 @@ test('the plugin hook in the same situation acts on CLAUDE_PROJECT_DIR, as 0.1.8
   assert.equal(run.status, 0, run.stderr);
   assert.ok(existsSync(path.join(root, 'artifacts/logs/guard-gate-s.log')));
   assert.equal(untracked(sibling.root), before);
+});
+
+test('copy hooks in a worktree attribute paths relative to the worktree root', (t) => {
+  const { root, copy, dir } = initialised(t);
+  const worktree = path.join(dir, 'wt');
+  git(root, 'worktree', 'add', '-q', worktree);
+  const session = copySession(copy, root, worktree);
+  session.write('src/a.ts', '1\n');
+  session.bash(() => writeFiles(worktree, { 'src/b.ts': '1\n' }));
+  assert.deepEqual(attributedLines(worktree, 's').map((e) => e.path), ['src/a.ts', 'src/b.ts']);
+  assert.equal(existsSync(path.join(root, 'artifacts')), false);
+});
+
+test('a worktree whose copy is another version: the gate skips the turn, tells the user and does not block', (t) => {
+  const { root, copy, dir } = initialised(t);
+  const worktree = path.join(dir, 'wt');
+  git(root, 'worktree', 'add', '-q', worktree);
+  writeFiles(worktree, { [`${COPY}/manifest.json`]: JSON.stringify({ version: '0.2.1', files: {}, hooks: {} }) });
+  const session = copySession(copy, root, worktree);
+  session.write('_docs/doc.md', '# Doc\n\nSee [gone](gone.md).\n');
+
+  const run = runCopyHook(copy, 'stop-gate', payload('stop-gate', worktree), { projectDir: root });
+  assert.equal(run.status, 0);
+  assert.equal(run.stderr, '');
+  assert.equal(
+    JSON.parse(run.stdout).systemMessage,
+    'honest-docs: this tree holds honest-docs 0.2.1, the hooks running are 0.2.0. The Stop gate checked nothing this turn.'
+  );
+  assert.match(readFileSync(path.join(worktree, 'artifacts/logs/guard-gate-s.log'), 'utf8'), / {2}- {2}version-mismatch\n$/);
+});
+
+test('session start from a copy names the copy command for the problems', (t) => {
+  const { root, copy } = initialised(t);
+  writeFiles(root, { '_docs/doc.md': '# Doc\n\n**Last Updated:** 2026-01-15 10:30 CET\n\n[a](a.md) [b](b.md) [c](c.md)\n' });
+  const run = copySession(copy, root).start();
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, 'honest-docs: 3 docs problems in this repo (not blocking); list them with node .claude/honest-docs/scripts/docs-check.mjs\n');
 });

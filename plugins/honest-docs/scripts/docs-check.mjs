@@ -17,6 +17,7 @@ import { checkInit, listedRules, rulesSection } from '../core/init.mjs';
 import { LAST_UPDATED_LINE } from '../core/last-updated.mjs';
 import { logEvent } from '../core/log.mjs';
 import { posixPath } from '../core/posix-path.mjs';
+import { SPECIFIER_EXTENSIONS } from '../core/problems.mjs';
 
 const JSON_OUTPUT = process.argv.slice(2).includes('--json');
 const ROOT = projectRoot();
@@ -121,12 +122,7 @@ const trimSlash = (p) => p.replace(/\/$/, '');
 const isAbsentByDesign = (p) =>
   ABSENT_BY_DESIGN.map(trimSlash).some((a) => trimSlash(p) === a || trimSlash(p).startsWith(`${a}/`));
 
-/**
- * `hooks/useAnalytics` in prose is an import specifier: the file is `hooks/useAnalytics.ts`, or a
- * folder with an index, so the token is tried with each extension and as `<token>/index.<ext>` before
- * it is reported.
- */
-const SPECIFIER_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs'];
+/** An import specifier is tried with each extension and as `<token>/index.<ext>` before it is reported. */
 const resolvesAsSpecifier = (token) =>
   SPECIFIER_EXTENSIONS.some((ext) => existsSync(join(ROOT, `${token}${ext}`)) || existsSync(join(ROOT, token, `index${ext}`)));
 
