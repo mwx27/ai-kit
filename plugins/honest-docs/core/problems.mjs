@@ -23,11 +23,12 @@ export const docsCheckCommand = (codeRoot = PLUGIN_ROOT) =>
   isCopy(codeRoot) ? `node ${COPY_DIR}/scripts/docs-check.mjs` : 'honest-docs-check';
 
 /**
- * docs-check --json from the running code's scripts/ → { problems } or { error }. `error` names what
- * went wrong in a few words: a timeout, an exit code, output that is not the JSON.
+ * docs-check --json from the scripts/ of `codeRoot` (the running code by default) → { problems } or
+ * { error }. `error` names what went wrong in a few words: a timeout, an exit code, output that is
+ * not the JSON.
  */
-export function runDocsCheck(root, timeout) {
-  const run = spawnSync(process.execPath, [path.join(PLUGIN_ROOT, 'scripts', 'docs-check.mjs'), '--json'], {
+export function runDocsCheck(root, timeout, codeRoot = PLUGIN_ROOT) {
+  const run = spawnSync(process.execPath, [path.join(codeRoot, 'scripts', 'docs-check.mjs'), '--json'], {
     cwd: root,
     encoding: 'utf8',
     timeout,

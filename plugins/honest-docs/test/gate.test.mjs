@@ -716,6 +716,23 @@ test('a turn that only deletes a file runs the checks and records it as verified
   assert.match(p.gateLog()[1], / {2}nothing-new$/);
 });
 
+test('a turn that only deletes files runs docs-check and not the guard, which would get no file', (t) => {
+  const p = project(t, { files: { 'src/old.ts': '1\n', '_docs/doc.md': `# Doc\n\n**Last Updated:** 2026-01-15 10:30 CET\n\nSee \`src/old.ts\`.\n` } });
+  p.session.bash(() => rmSync(path.join(p.root, 'src/b.ts')));
+  const pass = p.stop();
+  assert.equal(pass.status, 0, pass.stderr);
+  assert.deepEqual(p.calls(), []);
+  assert.match(p.gateLog()[0], / {2}ran {2}changed=1 checked=1 .* pass {2}docs-check-only$/);
+  assert.equal(pass.message.startsWith('docs-check: 1 file, '), true, pass.message);
+
+  // docs-check still runs: deleting a file a doc names blocks.
+  p.session.bash(() => rmSync(path.join(p.root, 'src/old.ts')));
+  const block = p.stop();
+  assert.equal(block.status, 2);
+  assert.match(block.stderr, /_docs\/doc\.md:5 {2}no such path: src\/old\.ts/);
+  assert.deepEqual(p.calls(), []);
+});
+
 test('guard --changed gets only the attributed files still on disk', (t) => {
   const p = project(t);
   p.write('src/a.ts', 'export const a = 2;\n');

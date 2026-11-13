@@ -59,9 +59,10 @@ dated layers inside the doc (`Correction, <date>`, `Since…`, `Caveat…`).
 **In the same change as the code:** a line in the {{indexFile}} docs index for any new
 `{{docsDir}}/features|tools/` file.
 
-`honest-docs-check` (run by the guard gate at the end of every turn) verifies every link, anchor,
-path, npm script and `covers:` glob a doc names still resolves, and that every doc in `{{docsDir}}/`
-has its `Last Updated` line — it does not verify that prose is true. When covered code changes, a
-hook names the doc once per session; whether a sentence went false is yours to judge.
+`node .claude/honest-docs/scripts/docs-check.mjs` (run by the guard gate at the end of every turn)
+verifies every link, anchor, path, npm script and `covers:` glob a doc names still resolves, and that
+every doc in `{{docsDir}}/` has its `Last Updated` line — it does not verify that prose is true. When
+covered code changes, a hook names the doc once per session; whether a sentence went false is yours
+to judge.
 
 Written by /honest-docs:init {{version}} — fixes go to the plugin, not this file.

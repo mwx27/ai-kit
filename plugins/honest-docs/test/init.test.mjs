@@ -1,5 +1,6 @@
-// honest-docs-init (scripts/init.mjs → core/init.mjs): the first run, a second run, a fragment
-// rewrapped by hand and a fragment whose words changed.
+// What /honest-docs:init and /honest-docs:update write besides the copy and the hooks (core/init.mjs),
+// run through scripts/install.mjs: the first run, a second run, a fragment rewrapped by hand and a
+// fragment whose words changed. What install adds around it is in install.test.mjs.
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -8,7 +9,7 @@ import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
 import { fragmentVersions, renderDocsRule } from '../core/init.mjs';
 import { lastUpdatedLine } from '../core/last-updated.mjs';
-import { PLUGIN_VERSION, fragment, fragmentVersion, git, runBin, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
+import { PLUGIN_VERSION, fragment, fragmentVersion, git, runBin, runInstall, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const HEAD = '# Project\n\n## CRITICAL\n\n- Keep it short.\n- ';
 const MIDDLE = '\n\n## Docs\n\n';
@@ -24,18 +25,29 @@ const after = () => claudeMd(fragment('read-line'), fragment('docs-policy'));
 /** A doc in _docs/ that init has nothing to add to. */
 const DATED_DOC = '# A\n\n**Last Updated:** 2026-01-01 10:00 CET\n';
 
+/** Lines only install prints, about the copy, settings.json and .prettierignore: install.test.mjs reads them. */
+const INSTALL_ONLY = /^(wrote \.claude\/settings\.json|wrote \.prettierignore|wrote \.claude\/honest-docs\/ |installed \S+$|updated \S+ → \S+$)/;
+
 /**
- * honest-docs-init as the agent runs it. A successful run ends with the docs-check verdict: that
- * line is cut from `stdout` into `result`, so the other tests read what init itself did.
+ * install.mjs as the skill runs it: init, then update once a copy is there. `stdout` keeps what
+ * core/init.mjs reported, without the `honest-docs-<mode>: ` tag; `nexts` holds the `next:` lines.
  */
 const init = (root) => {
-  const run = runBin('honest-docs-init', [], { cwd: root });
-  const at = run.stdout.lastIndexOf('honest-docs-init: honest-docs-check ');
-  if (at === -1) return { ...run, result: null };
-  return { ...run, stdout: run.stdout.slice(0, at), result: run.stdout.slice(at) };
+  const mode = existsSync(path.join(root, '.claude/honest-docs/manifest.json')) ? 'update' : 'init';
+  const run = runInstall(root, mode);
+  const out = run.stdout.split('\n').filter(Boolean);
+  const own = out
+    .filter((line) => line.startsWith(`honest-docs-${mode}: `))
+    .map((line) => line.slice(`honest-docs-${mode}: `.length))
+    .filter((line) => !INSTALL_ONLY.test(line));
+  return {
+    ...run,
+    stdout: own.map((line) => `${line}\n`).join(''),
+    nexts: out.filter((line) => line.startsWith('next: ')).map((line) => line.slice('next: '.length)),
+  };
 };
 const read = (root, file) => readFileSync(path.join(root, file), 'utf8');
-const NO_GUARD = 'honest-docs-init: .claude/honest-docs.json sets no guard.command: the Stop gate runs honest-docs-check alone.';
+const NO_GUARD = '.claude/honest-docs.json sets no guard.command: the Stop gate runs the docs check alone.';
 
 test('first run: writes the rule, the config skeleton and the current fragments', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': before() });
@@ -45,11 +57,11 @@ test('first run: writes the rule, the config skeleton and the current fragments'
   assert.equal(
     run.stdout,
     [
-      'honest-docs-init: wrote .claude/rules/docs.md',
-      'honest-docs-init: created .claude/honest-docs.json',
-      'honest-docs-init: wrote CLAUDE.md',
+      'wrote .claude/rules/docs.md',
+      'created .claude/honest-docs.json',
+      'wrote CLAUDE.md',
       NO_GUARD,
-      `honest-docs-init: docs-policy: pre-0.1.0 → ${fragmentVersion('docs-policy')}`,
+      `docs-policy: pre-0.1.0 → ${fragmentVersion('docs-policy')}`,
       '',
     ].join('\n')
   );
@@ -73,8 +85,8 @@ test('the rule takes docsDir and index.file from the config', (t) => {
   // The Rules line init wrote for _docs/ follows docsDir too.
   assert.equal(
     run.stdout,
-    'honest-docs-init: wrote .claude/rules/docs.md\nhonest-docs-init: wrote AGENTS.md\n' +
-      'honest-docs-init: updated the .claude/rules/docs.md line in the "## Rules" section of AGENTS.md\n'
+    'wrote .claude/rules/docs.md\nwrote AGENTS.md\n' +
+      'updated the .claude/rules/docs.md line in the "## Rules" section of AGENTS.md\n'
   );
   const rule = read(root, '.claude/rules/docs.md');
   assert.match(rule, /- 'docs\/\*\*\/\*\.md'/);
@@ -89,7 +101,7 @@ test('second run: no changes, nothing rewritten', (t) => {
 
   const run = init(root);
   assert.equal(run.status, 0);
-  assert.equal(run.stdout, `honest-docs-init: no changes\n${NO_GUARD}\n`);
+  assert.equal(run.stdout, `no changes\n${NO_GUARD}\n`);
   assert.deepEqual(files.map((file) => read(root, file)), first);
 });
 
@@ -97,7 +109,7 @@ test('a config the project already has is left alone', (t) => {
   const config = '{ "docsDir": "_docs", "guard": { "command": ["bash", "guard.sh"] } }\n';
   const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '.claude/honest-docs.json': config });
   const run = init(root);
-  assert.equal(run.stdout, 'honest-docs-init: wrote .claude/rules/docs.md\n');
+  assert.equal(run.stdout, 'wrote .claude/rules/docs.md\n');
   assert.equal(read(root, '.claude/honest-docs.json'), config);
 });
 
@@ -168,7 +180,7 @@ test('init leaves a tree that docs-check passes on the init category', (t) => {
 
 const PLAIN = `# Project\n\n## Rules\n\n${RULE_LINE}\n\nProject text.\n`;
 const APPENDED = (names) =>
-  `honest-docs-init: appended ${names} to CLAUDE.md under "## honest-docs"; move them anywhere in the file, init finds them by their words`;
+  `appended ${names} to CLAUDE.md under "## honest-docs"; move them anywhere in the file, init finds them by their words`;
 
 test('first run without the fragments: both appended under one heading, the rest byte for byte', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': PLAIN, 'package.json': '{}' });
@@ -178,9 +190,9 @@ test('first run without the fragments: both appended under one heading, the rest
   assert.equal(
     run.stdout,
     [
-      'honest-docs-init: wrote .claude/rules/docs.md',
-      'honest-docs-init: created .claude/honest-docs.json',
-      'honest-docs-init: wrote CLAUDE.md',
+      'wrote .claude/rules/docs.md',
+      'created .claude/honest-docs.json',
+      'wrote CLAUDE.md',
       NO_GUARD,
       APPENDED('read-line and docs-policy'),
       '',
@@ -193,7 +205,7 @@ test('first run without the fragments: both appended under one heading, the rest
   assert.doesNotMatch(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}init \(/m);
 
   // Second run: everything is found where it was appended.
-  assert.equal(init(root).stdout, `honest-docs-init: no changes\n${NO_GUARD}\n`);
+  assert.equal(init(root).stdout, `no changes\n${NO_GUARD}\n`);
 });
 
 test('fragments moved by hand elsewhere in the file: still no changes', (t) => {
@@ -204,7 +216,7 @@ test('fragments moved by hand elsewhere in the file: still no changes', (t) => {
 
   const run = init(root);
   assert.equal(run.status, 0, run.stderr);
-  assert.equal(run.stdout, `honest-docs-init: no changes\n${NO_GUARD}\n`);
+  assert.equal(run.stdout, `no changes\n${NO_GUARD}\n`);
   assert.equal(read(root, 'CLAUDE.md'), moved);
 });
 
@@ -220,7 +232,7 @@ test('first run with one fragment already there: only the missing one is appende
 
 // P1: the docs rule gets a line in the Rules index.
 
-const LISTED = 'honest-docs-init: listed .claude/rules/docs.md in the "## Rules" section of CLAUDE.md';
+const LISTED = 'listed .claude/rules/docs.md in the "## Rules" section of CLAUDE.md';
 const fragments = () => `${fragment('read-line')}\n\n${fragment('docs-policy')}`;
 
 test('Rules section without the rule: the line goes at its end, and a second run adds nothing', (t) => {
@@ -234,7 +246,7 @@ test('Rules section without the rule: the line goes at its end, and a second run
   assert.doesNotMatch(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}index \(/m);
 
   const second = init(root);
-  assert.equal(second.stdout, `honest-docs-init: no changes\n${NO_GUARD}\n`);
+  assert.equal(second.stdout, `no changes\n${NO_GUARD}\n`);
 });
 
 test('Rules section ending in prose: the line is set off by a blank line', (t) => {
@@ -252,7 +264,7 @@ test('no Rules section, first run: created right after the appended ## honest-do
   assert.ok(run.stdout.endsWith(`${APPENDED('read-line and docs-policy')}\n${LISTED}\n`), run.stdout);
   assert.equal(read(root, 'CLAUDE.md'), `# Project\n\nText.\n\n## honest-docs\n\n${fragments()}\n\n## Rules\n\n${RULE_LINE}\n`);
   assert.doesNotMatch(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}(index|init) \(/m);
-  assert.equal(init(root).stdout, `honest-docs-init: no changes\n${NO_GUARD}\n`);
+  assert.equal(init(root).stdout, `no changes\n${NO_GUARD}\n`);
 });
 
 test('no Rules section, ## honest-docs followed by another section: created between them', (t) => {
@@ -288,7 +300,7 @@ test('a rule listed in other words counts as listed: the line is untouched, and 
   assert.doesNotMatch(run.stdout, /listed/);
   assert.ok(
     run.stdout.includes(
-      'honest-docs-init: left the line linking .claude/rules/docs.md in the "## Rules" section of CLAUDE.md untouched: ' +
+      'left the line linking .claude/rules/docs.md in the "## Rules" section of CLAUDE.md untouched: ' +
         'it is not in the words init writes\n'
     ),
     run.stdout
@@ -303,7 +315,7 @@ test('init rewrites its own Rules line after docsDir changes, the rest of the se
   const run = init(root);
 
   assert.equal(run.status, 0, run.stderr);
-  assert.ok(run.stdout.includes('honest-docs-init: updated the .claude/rules/docs.md line in the "## Rules" section of CLAUDE.md\n'), run.stdout);
+  assert.ok(run.stdout.includes('updated the .claude/rules/docs.md line in the "## Rules" section of CLAUDE.md\n'), run.stdout);
   assert.equal(read(root, 'CLAUDE.md'), text.replace('`_docs/`', '`docs/`'));
   assert.doesNotMatch(init(root).stdout, /updated|untouched/);
 });
@@ -333,7 +345,7 @@ test('a committed doc without a Last Updated line gets one dated by its last com
 
   const run = init(root);
   assert.equal(run.status, 0, run.stderr);
-  assert.ok(run.stdout.includes(`honest-docs-init: added ${line} to _docs/features/a.md\n`), run.stdout);
+  assert.ok(run.stdout.includes(`added ${line} to _docs/features/a.md\n`), run.stdout);
   assert.equal(read(root, '_docs/features/a.md'), `---\ncovers:\n  - x\n---\n\n# A\n\n${line}\n\nBody.\n`);
   // The Stop gate restamps a changed doc from its mtime, so the mtime carries the same date.
   assert.equal(Math.floor(statSync(path.join(root, '_docs/features/a.md')).mtimeMs / 1000), committed.getTime() / 1000);
@@ -345,7 +357,7 @@ test('an uncommitted doc without a Last Updated line gets its mtime', (t) => {
   writeFiles(root, { '_docs/a.md': '# A\n' });
   utimesSync(path.join(root, '_docs/a.md'), OLD, OLD);
   const run = init(root);
-  assert.ok(run.stdout.includes('honest-docs-init: added **Last Updated:** 2020-05-06 07:08 UTC to _docs/a.md\n'), run.stdout);
+  assert.ok(run.stdout.includes('added **Last Updated:** 2020-05-06 07:08 UTC to _docs/a.md\n'), run.stdout);
   assert.equal(read(root, '_docs/a.md'), '# A\n\n**Last Updated:** 2020-05-06 07:08 UTC\n');
 });
 
@@ -374,29 +386,27 @@ test('a doc without an H1 is left alone, with a warning naming it', (t) => {
   assert.equal(run.status, 0, run.stderr);
   assert.equal(
     run.stderr,
-    'honest-docs-init: warning: _docs/a.md has no H1, so init added no **Last Updated:** line; add one under its title.\n'
+    'warning: _docs/a.md has no H1, so init added no **Last Updated:** line; add one under its title.\n'
   );
   assert.equal(read(root, '_docs/a.md'), text);
 });
 
-// K3: init ends with what honest-docs-check reports, whatever it reports exiting 0.
+// K3: install ends with what the new copy's docs-check reports, whatever it reports exiting 0.
 
-test('init ends by saying honest-docs-check reports no problems', (t) => {
+const PROBLEMS = (n) => `${n} docs problem${n === 1 ? '' : 's'} in this repo (not blocking); propose fixes and wait for the user's consent`;
+
+test('init with no docs problems says nothing about them', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': after(), 'package.json': '{}', '_docs/a.md': DATED_DOC });
   const run = init(root);
   assert.equal(run.status, 0, run.stderr);
-  assert.equal(run.result, 'honest-docs-init: honest-docs-check reports no problems, so the docs give the Stop gate nothing to block on.\n');
+  assert.deepEqual(run.nexts.filter((n) => /docs problem/.test(n)), []);
 });
 
-test('init ends with the number of problems honest-docs-check reports, and still exits 0', (t) => {
+test('init ends with the number of problems docs-check reports, and still exits 0', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': after(), 'package.json': '{}', '_docs/a.md': `${DATED_DOC}\n[a](gone.md), [b](gone-too.md)\n` });
   const run = init(root);
   assert.equal(run.status, 0, run.stderr);
-  assert.equal(
-    run.result,
-    'honest-docs-init: honest-docs-check reports 2 problems: the Stop gate blocks every turn that changes a file ' +
-      'until they are fixed. Run honest-docs-check to see them.\n'
-  );
+  assert.equal(run.nexts.at(-1), PROBLEMS(2));
 });
 
 test('init that fails runs no docs check', (t) => {
@@ -404,13 +414,13 @@ test('init that fails runs no docs check', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': text });
   const run = init(root);
   assert.equal(run.status, 1);
-  assert.equal(run.result, null);
+  assert.deepEqual(run.nexts, []);
 });
 
 // P2: a docsDir that does not exist.
 
 const missingDocsDir = (folders) =>
-  `honest-docs-init: warning: docsDir "_docs" does not exist, so honest-docs-check scans no docs there; ${folders} ` +
+  `warning: docsDir "_docs" does not exist, so the docs check scans no docs there; ${folders} ` +
   'Set docsDir in .claude/honest-docs.json, then run /honest-docs:init again.\n';
 
 test('docsDir missing: a warning naming the folders that hold .md files, exit 0', (t) => {
@@ -435,6 +445,12 @@ test('docsDir missing and no .md folder anywhere', (t) => {
   assert.equal(init(root).stderr, missingDocsDir('no folder holds .md files.'));
 });
 
+test('docsDir missing on update: the copy its own templates are in is not named as a docs folder', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after() });
+  init(root);
+  assert.equal(init(root).stderr, missingDocsDir('folders holding .md files: .claude/rules/ (1).'));
+});
+
 test('docsDir missing: at most 10 folders named', (t) => {
   const files = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`d${String(i).padStart(2, '0')}/a.md`, '']));
   const { root } = tmpRepo(t, { 'CLAUDE.md': after(), ...files });
@@ -457,8 +473,9 @@ test('a file init writes is gitignored: one warning per file, exit 0, still writ
   assert.equal(run.status, 0);
   assert.equal(
     run.stderr,
-    'honest-docs-init: warning: .claude/rules/docs.md is ignored by git (.gitignore:2:.claude/), so it will not be committed and nobody else gets it.\n' +
-      'honest-docs-init: warning: .claude/honest-docs.json is ignored by git (.gitignore:2:.claude/), so it will not be committed and nobody else gets it.\n'
+    ['.claude/rules/docs.md', '.claude/honest-docs.json', '.claude/settings.json', '.claude/honest-docs/manifest.json']
+      .map((file) => `warning: ${file} is ignored by git (.gitignore:2:.claude/), so it will not be committed and nobody else gets it.\n`)
+      .join('')
   );
   assert.ok(existsSync(path.join(root, '.claude/rules/docs.md')));
   // A second run writes nothing and still warns: the files are still not committed.
@@ -468,7 +485,7 @@ test('a file init writes is gitignored: one warning per file, exit 0, still writ
 test('a tracked file matching an ignore pattern, or one a negation re-includes, is not reported', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC });
   // Written after the commit, so CLAUDE.md is tracked though the pattern matches it.
-  writeFiles(root, { '.gitignore': 'CLAUDE.md\n.claude/*\n!.claude/rules/\n!.claude/honest-docs.json\n' });
+  writeFiles(root, { '.gitignore': 'CLAUDE.md\n.claude/*\n!.claude/rules/\n!.claude/honest-docs.json\n!.claude/settings.json\n!.claude/honest-docs/\n' });
   const run = init(root);
   assert.equal(run.status, 0);
   assert.equal(run.stderr, '');
@@ -484,7 +501,7 @@ test('a negation in a core.excludesFile at an absolute path is not reported', (t
   const run = init(root);
   assert.equal(run.status, 0);
   // The excludes file is read: the rule it does ignore is reported, the negated config is not.
-  assert.match(run.stderr, /^honest-docs-init: warning: \.claude\/rules\/docs\.md is ignored by git \(.+:1:\.claude\/\*\), /);
+  assert.match(run.stderr, /^warning: \.claude\/rules\/docs\.md is ignored by git \(.+:1:\.claude\/\*\), /);
   assert.doesNotMatch(run.stderr, /honest-docs\.json/);
 });
 

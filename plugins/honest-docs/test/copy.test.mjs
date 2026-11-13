@@ -3,7 +3,7 @@
 // on a repository that holds the copy (core/root.mjs).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { hookRoot } from '../core/root.mjs';
@@ -13,27 +13,18 @@ import { PLUGIN_ROOT, PLUGIN_VERSION, agentSession, attributedLines, cleanEnv, e
 const COPY = '.claude/honest-docs';
 const HOOKS = ['session-start', 'pre-tool', 'post-tool', 'instructions-log', 'stop-gate'];
 
-/** What /honest-docs:init will copy (impl plan 1.8), and a manifest naming `version`, or none. */
-function installCopy(root, { version = '0.2.0' } = {}) {
-  const copy = path.join(root, COPY);
-  cpSync(path.join(PLUGIN_ROOT, 'core'), path.join(copy, 'core'), { recursive: true });
-  cpSync(path.join(PLUGIN_ROOT, 'templates'), path.join(copy, 'templates'), { recursive: true });
-  mkdirSync(path.join(copy, 'hooks'));
-  for (const file of readdirSync(path.join(PLUGIN_ROOT, 'hooks')).filter((f) => f.endsWith('.mjs')))
-    cpSync(path.join(PLUGIN_ROOT, 'hooks', file), path.join(copy, 'hooks', file));
-  mkdirSync(path.join(copy, 'scripts'));
-  for (const file of ['docs-check.mjs', 'docs-grep.mjs'])
-    cpSync(path.join(PLUGIN_ROOT, 'scripts', file), path.join(copy, 'scripts', file));
-  if (version) writeFileSync(path.join(copy, 'manifest.json'), `${JSON.stringify({ version, files: {}, hooks: {} })}\n`);
-  return copy;
-}
-
-/** A repo /honest-docs:init set up, with the copy beside it, committed. */
-function initialised(t, options) {
+/**
+ * A repo /honest-docs:init set up, committed, with its copy. `version` overrides the manifest's,
+ * and null removes the manifest.
+ */
+function initialised(t, { version } = {}) {
   const project = tmpRepo(t, { 'CLAUDE.md': '# Project\n' });
   const init = runBin('honest-docs-init', [], { cwd: project.root });
   assert.equal(init.status, 0, init.stderr);
-  const copy = installCopy(project.root, options);
+  const copy = path.join(project.root, COPY);
+  const manifest = path.join(copy, 'manifest.json');
+  if (version === null) rmSync(manifest);
+  else if (version) writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, 'utf8')), version }));
   git(project.root, 'add', '-A');
   git(project.root, 'commit', '-q', '-m', 'init');
   return { ...project, copy };
@@ -104,7 +95,7 @@ test('docs-check run from the copy passes init, and logs the manifest version fr
   assert.equal(hooked.status, 0, hooked.stderr);
   const [event] = eventLog(root);
   assert.equal(event.event, 'docs-check');
-  assert.equal(event.pluginVersion, '0.2.0');
+  assert.equal(event.pluginVersion, PLUGIN_VERSION);
   assert.equal(event.pluginRoot, copy);
 });
 
@@ -128,7 +119,7 @@ test('the copy gate runs the copy docs-check and hands the guard the copy script
   assert.equal(readFileSync(record, 'utf8'), `${path.join(copy, 'scripts')} 1`);
   assert.deepEqual(
     eventLog(root).map((e) => [e.event, e.pluginVersion]),
-    [['attribution', '0.2.0'], ['attribution', '0.2.0'], ['docs-check', '0.2.0'], ['gate', '0.2.0']]
+    ['attribution', 'attribution', 'docs-check', 'gate'].map((event) => [event, PLUGIN_VERSION])
   );
 });
 
@@ -206,7 +197,7 @@ test('a worktree whose copy is another version: the gate skips the turn, tells t
   assert.equal(run.stderr, '');
   assert.equal(
     JSON.parse(run.stdout).systemMessage,
-    'honest-docs: this tree holds honest-docs 0.2.1, the hooks running are 0.2.0. The Stop gate checked nothing this turn.'
+    `honest-docs: this tree holds honest-docs 0.2.1, the hooks running are ${PLUGIN_VERSION}. The Stop gate checked nothing this turn.`
   );
   assert.match(readFileSync(path.join(worktree, 'artifacts/logs/guard-gate-s.log'), 'utf8'), / {2}- {2}version-mismatch\n$/);
 });

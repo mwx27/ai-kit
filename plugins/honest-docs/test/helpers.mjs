@@ -96,6 +96,16 @@ export function runBin(command, args, { cwd, env = {} }) {
   return { status: run.status, stdout: run.stdout, stderr: run.stderr };
 }
 
+/** scripts/install.mjs as the init and update skills run it, from `pluginRoot` (this plugin by default). */
+export function runInstall(cwd, mode, { args = [], pluginRoot = PLUGIN_ROOT, env = {} } = {}) {
+  const run = spawnSync(process.execPath, [path.join(pluginRoot, 'scripts', 'install.mjs'), '--mode', mode, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: cleanEnv(env),
+  });
+  return { status: run.status, stdout: run.stdout, stderr: run.stderr };
+}
+
 export const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 export const readLines = (file) => readFileSync(file, 'utf8').split('\n').filter(Boolean);
 

@@ -111,7 +111,7 @@ their lines (`ls`, `find -name`, `wc -l`).
 - A T and a U stay as they are.
 - Change docs only. If the code looks wrong and the doc right, say so in the report and leave both.
 - Never touch the `Last Updated` line; the guard gate sets it.
-- When done, `honest-docs-check` must pass.
+- When done, `node .claude/honest-docs/scripts/docs-check.mjs` must pass.
 
 ## Report
 
