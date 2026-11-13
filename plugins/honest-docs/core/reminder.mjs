@@ -8,6 +8,7 @@ import { treeSnapshot } from './changed-files.mjs';
 import { ConfigError, loadConfig, ownDirs } from './config.mjs';
 import { isDoc, readCovers } from './doc-covers.mjs';
 import { logEvent } from './log.mjs';
+import { hookRoot } from './root.mjs';
 import { sessionKey, sessionStore } from './session-state.mjs';
 
 const AS_IN_HEAD = Symbol('as in HEAD');
@@ -37,7 +38,8 @@ function message(due, current) {
 /** Hook input → { stdout, exitCode }. Always exit 0. */
 export function reminder(input) {
   if (!input) return { exitCode: 0 };
-  const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const root = hookRoot(input);
+  if (root === null) return { exitCode: 0 };
   let config;
   try {
     config = loadConfig(root);

@@ -4,9 +4,13 @@
 //
 // An unreadable payload reaches the handler as null. Anything the handler throws exits 0 in
 // silence: a hook that breaks the session is worse than no hook.
+//
+// HONEST_DOCS_HOOK=1 marks this process and what it spawns as started by a hook: only those write
+// the event log (core/log.mjs).
 import { readFileSync } from 'node:fs';
 
 export function runHook(handler) {
+  process.env.HONEST_DOCS_HOOK = '1';
   let input = null;
   try {
     input = JSON.parse(readFileSync(0, 'utf8'));

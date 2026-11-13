@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { PLUGIN_ROOT, docsBaseline, escapeRegExp, git, readJson, readLines, runHook, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
+import { PLUGIN_ROOT, docsBaseline, escapeRegExp, eventLog, git, readJson, readLines, runHook, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const SESSION = 'gate-session';
 const STATE = `artifacts/claude-hooks/honest-docs-${SESSION}.json`;
@@ -310,14 +310,11 @@ test('GUARD_ERROR with exit 0 is a pass', (t) => {
 
 test('GUARD_ERROR without a reason, and its event log line', (t) => {
   const p = project(t);
-  const data = path.join(p.dir, 'data');
   p.write('src/a.ts', 'export const a = 2;\n');
-  const run = p.stop({ exit: 3, output: 'GUARD_ERROR reason=\n', env: { CLAUDE_PLUGIN_DATA: data } });
+  const run = p.stop({ exit: 3, output: 'GUARD_ERROR reason=\n' });
   assert.equal(run.status, 0);
   assert.match(run.message, /could not check \(no reason given\)/);
-  const gate = readLines(path.join(data, 'events.jsonl'))
-    .map((line) => JSON.parse(line))
-    .find((e) => e.event === 'gate');
+  const gate = eventLog(p.root).find((e) => e.event === 'gate');
   assert.equal(gate.outcome, 'unchecked');
   assert.equal(gate.reason, 'no reason given');
 });
@@ -522,11 +519,8 @@ test('outside a git repo the gate passes in silence', (t) => {
 
 /** Ends a turn with the event log on, and returns the gate's own events. */
 function stopLogged(p, options = {}) {
-  const data = path.join(p.dir, 'data');
-  const run = p.stop({ ...options, env: { CLAUDE_PLUGIN_DATA: data } });
-  const file = path.join(data, 'events.jsonl');
-  const gateEvents = existsSync(file) ? readLines(file).map((line) => JSON.parse(line)).filter((e) => e.event === 'gate') : [];
-  return { run, gateEvents };
+  const run = p.stop(options);
+  return { run, gateEvents: eventLog(p.root).filter((e) => e.event === 'gate') };
 }
 
 for (const [label, text, detail] of [

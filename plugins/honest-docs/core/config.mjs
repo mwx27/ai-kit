@@ -31,6 +31,9 @@ import path from 'node:path';
 
 export const CONFIG_FILE = '.claude/honest-docs.json';
 
+/** Where /honest-docs:init copies the hooks and scripts in a project (core/version.mjs). */
+export const COPY_DIR = '.claude/honest-docs';
+
 /** A config file the project has but the plugin cannot use. The message starts with the file name. */
 export class ConfigError extends Error {
   constructor(detail) {
@@ -58,6 +61,8 @@ const DEFAULTS = {
     prebuildDirs: [],
   },
 };
+
+export const DEFAULT_LOG_DIR = DEFAULTS.logDir;
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const trimSlash = (p) => p.replace(/\/+$/, '');
@@ -92,8 +97,8 @@ export function loadConfig(root) {
   return config;
 }
 
-/** The plugin's own folders, which no check counts as a change. */
-export const ownDirs = (config) => [`${config.stateDir}/`, `${config.logDir}/`];
+/** The plugin's own folders, which no check counts as a change: its state, its logs and its copy. */
+export const ownDirs = (config) => [`${config.stateDir}/`, `${config.logDir}/`, `${COPY_DIR}/`];
 
 /** Top-level folders a scan of the tree never walks into: git, dependencies, the plugin's own output. */
 export const skippedRoots = (config) => [
