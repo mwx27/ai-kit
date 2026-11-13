@@ -1,10 +1,11 @@
-// /honest-docs:init: what it writes into a project, and the check docs-check runs on it.
+// What /honest-docs:init and /honest-docs:update write into a project besides the copy and the hooks
+// (core/install.mjs), and the check docs-check runs on it.
 //
 //   .claude/rules/docs.md   templates/docs.md with the config's docsDir and index.file filled in;
 //                           the plugin is its only author, so it is overwritten, and its last line
 //                           stamps the plugin version. The check compares the rest of the text, not
 //                           the stamp, so an update that leaves the rule alone does not fail it
-//   .claude/honest-docs.json  a skeleton, written only when the project has none
+//   .claude/honest-docs.json  a skeleton, written only when the project has none (init only)
 //   index.file (CLAUDE.md)  two fragments — the `Read` line and the docs policy — each replaced
 //                           where it stands by its current version; the rest of the file is the
 //                           project's
@@ -38,11 +39,10 @@
 // Two things init warns about and does not stop for: a docsDir that does not exist, naming the
 // folders that do hold .md files; and a file it maintains that git ignores, which nobody else gets.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { CONFIG_FILE } from './config.mjs';
+import { CONFIG_FILE, COPY_DIR } from './config.mjs';
 import { docSet } from './doc-set.mjs';
-import { ignoredByGit } from './git-ignored.mjs';
 import { LAST_UPDATED_LINE, lastUpdatedLine } from './last-updated.mjs';
 import { PLUGIN_ROOT, pluginVersion } from './log.mjs';
 
@@ -57,8 +57,8 @@ const SKELETON = { docsDir: '_docs', guard: { command: null } };
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** x.y.z → [x, y, z], or null for anything else (pre-<v> included). */
-const semver = (version) => version.match(/^(\d+)\.(\d+)\.(\d+)$/)?.slice(1).map(Number) ?? null;
-const compareSemver = (a, b) => a.reduce((diff, n, i) => diff || n - b[i], 0);
+export const semver = (version) => version.match(/^(\d+)\.(\d+)\.(\d+)$/)?.slice(1).map(Number) ?? null;
+export const compareSemver = (a, b) => a.reduce((diff, n, i) => diff || n - b[i], 0);
 
 /**
  * Every version of a fragment the plugin at `version` knows, `{ version, text }`, the current one
@@ -154,7 +154,7 @@ function withRulesLine(text, config, indexFile) {
 
 const DIR_LIST = 10;
 
-/** Folders under `root` holding .md files directly, most files first, node_modules and .git skipped. */
+/** Folders under `root` holding .md files directly, most files first; node_modules, .git and the copy skipped. */
 function markdownFolders(root) {
   const counts = new Map();
   const walk = (dir) => {
@@ -166,8 +166,8 @@ function markdownFolders(root) {
     }
     for (const entry of entries) {
       // isDirectory() is false for a symlink, so a link loop is never followed.
-      if (entry.isDirectory() && entry.name !== 'node_modules' && entry.name !== '.git')
-        walk(dir ? `${dir}/${entry.name}` : entry.name);
+      const rel = dir ? `${dir}/${entry.name}` : entry.name;
+      if (entry.isDirectory() && entry.name !== 'node_modules' && entry.name !== '.git' && rel !== COPY_DIR) walk(rel);
       else if (dir && entry.isFile() && entry.name.endsWith('.md')) counts.set(dir, (counts.get(dir) ?? 0) + 1);
     }
   };
@@ -180,7 +180,7 @@ function missingDocsDirWarning(root, config) {
   const shown = folders.slice(0, DIR_LIST).map(([dir, n]) => `${dir}/ (${n})`);
   if (folders.length > DIR_LIST) shown.push(`and ${folders.length - DIR_LIST} more`);
   return (
-    `docsDir "${config.docsDir}" does not exist, so honest-docs-check scans no docs there; ` +
+    `docsDir "${config.docsDir}" does not exist, so the docs check scans no docs there; ` +
     (shown.length > 0 ? `folders holding .md files: ${shown.join(', ')}. ` : 'no folder holds .md files. ') +
     `Set docsDir in ${CONFIG_FILE}, then run /honest-docs:init again.`
   );
@@ -270,7 +270,7 @@ export function planInit(root, config) {
 
   if (!existsSync(path.join(root, CONFIG_FILE)))
     writes.push({ file: CONFIG_FILE, text: `${JSON.stringify(SKELETON, null, 2)}\n` });
-  if (!config.guard.command) notes.push(`${CONFIG_FILE} sets no guard.command: the Stop gate runs honest-docs-check alone.`);
+  if (!config.guard.command) notes.push(`${CONFIG_FILE} sets no guard.command: the Stop gate runs the docs check alone.`);
   const dated = datedDocs(root, config);
   writes.push(...dated.writes);
   notes.push(...dated.notes);
@@ -319,24 +319,6 @@ export function planInit(root, config) {
   text = listed.text;
   if (text !== original) writes.push({ file: indexFile, text });
   return { writes, notes, warnings, errors };
-}
-
-/**
- * Runs planInit and, only when it found no error, makes every write; then warns about each file
- * init maintains that git ignores, written this run or not.
- */
-export function runInit(root, config) {
-  const plan = planInit(root, config);
-  if (plan.errors.length > 0) return plan;
-  for (const { file, text, mtime } of plan.writes) {
-    mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-    writeFileSync(path.join(root, file), text);
-    if (mtime) utimesSync(path.join(root, file), new Date(), mtime);
-  }
-  const maintained = [DOCS_RULE, CONFIG_FILE, config.index.file].filter((file) => existsSync(path.join(root, file)));
-  for (const { file, source } of ignoredByGit(root, maintained))
-    plan.warnings.push(`${file} is ignored by git (${source}), so it will not be committed and nobody else gets it.`);
-  return plan;
 }
 
 /**

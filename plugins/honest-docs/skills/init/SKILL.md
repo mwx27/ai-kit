@@ -1,33 +1,22 @@
 ---
 name: init
-description: Write or update the plugin's docs rule, config skeleton and CLAUDE.md fragments in this project.
+description: Install the honest-docs checks into this project — the hooks, the docs check and the docs rule.
 disable-model-invocation: true
 ---
 
 # honest-docs init
 
-Run `honest-docs-init` with the Bash tool and show its output verbatim.
+Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/install.mjs" --mode init` with the Bash tool and show its
+output verbatim.
 
-It writes `.claude/rules/docs.md` (the plugin is its only author: fixes go to the plugin, never
-to that file), creates `.claude/honest-docs.json` only when the project has none, and replaces
-in `CLAUDE.md` the `Read` line and the docs policy with their current versions, leaving the rest
-of the file as it is. On the first run it appends whichever of the two is missing under a
-`## honest-docs` heading at the end of `CLAUDE.md`. It lists the rule in the `CLAUDE.md` Rules
-section, creating one when there is none, and gives each doc in the docs folder that has no
-`**Last Updated:**` line one under its title, dated by its last commit. Run it again after every
-plugin update; `honest-docs-check` reports `init` when an update changed the rule or a passage,
-until you do.
+It copies the hooks and the docs check into `.claude/honest-docs/`, adds the hooks to
+`.claude/settings.json`, writes `.claude/rules/docs.md`, the `CLAUDE.md` passages and a starter
+`.claude/honest-docs.json`. Every step left to you is a `next:` line: carry out each one. A
+`warning:` line is for the user to decide on; do not change the config or `.gitignore` on your own.
 
-After a successful run, format the files it wrote the way the project formats Markdown. If the
-output says it appended fragments, tell the user where they went and that they can move them
-anywhere in `CLAUDE.md`. A `warning:` line — no docs folder, a file git ignores, a doc with no
-title — is for the user to decide on; do not change the config or `.gitignore` on your own. The
-last line is what `honest-docs-check` reports; when it counts problems, offer to fix them, since
-the Stop gate blocks until they are, but do not start before the user agrees.
-
-If it exits non-zero, it wrote nothing: a fragment is there twice, or after an earlier run it is
-gone or its words were edited by hand. Show the user the passage you take to be the fragment, if
-any, and ask with `AskUserQuestion` what to do — never edit it to match and rerun on your own.
+If it exits non-zero, it wrote nothing. Show the user what it reports (a diff, a passage you take to
+be the fragment it names) and ask with `AskUserQuestion` what to do. Rerun with `--force` only when
+the user agrees to overwrite the files the diff shows; never edit anything to make it pass.
 
 ## The config it writes
 

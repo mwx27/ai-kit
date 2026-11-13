@@ -48,10 +48,10 @@
 //   <ISO>  ran|skipped  changed=<n> checked=<n>  ms=<n>  pass|fail|giveup|unchecked|error|-  [reason]
 // so the question "what does this gate actually cost per turn" is answered by the log, not by
 // an estimate. `changed` counts the attributed paths. `ran` means docs-check was started. A pass
-// with no guard configured carries the reason `docs-check-only`, and a stop that took the start set
-// `start-set-at-stop` or `start-set-renewed`; `unchecked` carries the guard's GUARD_ERROR reason,
-// and `error` means a step could not be run at all. The same outcome goes to the shared event log
-// (core/log.mjs).
+// that ran no guard — none configured, or no attributed file left on disk — carries the reason
+// `docs-check-only`, and a stop that took the start set `start-set-at-stop` or `start-set-renewed`;
+// `unchecked` carries the guard's GUARD_ERROR reason, and `error` means a step could not be run at
+// all. The same outcome goes to the shared event log (core/log.mjs).
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
@@ -304,7 +304,10 @@ export function gate(input) {
       if (caused.length > 0) return block('docs', problemLines(caused), ranMessage());
     }
 
-    if (hasGuard) {
+    // A turn that only deleted files leaves the guard nothing to check: `--changed` with no file
+    // would be the guard's whole project, or its usage error.
+    const runGuard = hasGuard && present.length > 0;
+    if (runGuard) {
       ran.push('guard --changed');
       const run = spawnSync(command[0], [...command.slice(1), '--changed', ...present], {
         cwd: root,
@@ -345,7 +348,7 @@ export function gate(input) {
     }
     delete state.failure;
     store.write(state);
-    audit('ran', changed, files.length, 'pass', withNotes(hasGuard ? '' : 'docs-check-only'));
+    audit('ran', changed, files.length, 'pass', withNotes(runGuard ? '' : 'docs-check-only'));
     return { stdout: JSON.stringify({ systemMessage: ranMessage() }), exitCode: 0 };
   } catch (error) {
     // Every internal failure ends here: a broken gate exits 0. It must never be the reason work
