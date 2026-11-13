@@ -1,17 +1,16 @@
-// The session baseline (hooks/session-baseline.mjs) and the doc reminder (hooks/doc-reminder.mjs),
-// which reads the snapshot the baseline stores.
+// SessionStart (hooks/session-start.mjs), which takes the start set and names its size, and the doc
+// reminder, which runs in hooks/post-tool.mjs on the paths a tool call was just attributed.
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { git, readJson, runHook, tmpRepo } from './helpers.mjs';
+import { agentSession, docsBaseline, git, readJson, runHook, sessionPath, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const SESSION = 'session-1';
-const STATE = `artifacts/claude-hooks/honest-docs-${SESSION}.json`;
 
 const doc = (globs) => `---\ncovers:\n${globs.map((g) => `  - '${g}'`).join('\n')}\n---\n\n# Doc\n`;
 
-function project(t) {
+function project(t, files = {}) {
   const { root } = tmpRepo(t, {
     '_docs/features/alpha.md': doc(['src/**']),
     '_docs/features/beta.md': doc(['lib/*.ts']),
@@ -19,135 +18,141 @@ function project(t) {
     'src/b.ts': '1\n',
     'lib/x.ts': '1\n',
     'other.txt': '1\n',
+    ...files,
   });
-  const write = (file, text) => writeFileSync(path.join(root, file), text);
-  const baseline = (source = 'startup') => runHook('session-baseline', { session_id: SESSION, source }, { root });
-  const toolUse = () => {
-    const run = runHook('doc-reminder', { session_id: SESSION, hook_event_name: 'PostToolUse', tool_name: 'Bash' }, { root });
-    return { ...run, output: run.stdout ? JSON.parse(run.stdout) : null };
-  };
-  const state = () => readJson(path.join(root, STATE));
-  const hash = (file) => git(root, 'hash-object', file).trim();
-  return { root, write, baseline, toolUse, state, hash };
+  const session = agentSession(root, SESSION);
+  const editor = (file, text) => writeFileSync(path.join(root, file), text);
+  const state = () => readJson(sessionPath(root, SESSION, 'state.json'));
+  return { root, session, editor, state };
 }
 
-test('baseline: records the dirt already there as verified, and the tree snapshot', (t) => {
-  const p = project(t);
-  p.write('src/a.ts', 'wip\n');
-  p.write('new.txt', 'untracked\n');
-  git(p.root, 'rm', '-q', 'other.txt');
+/** A repo whose docs pass docs-check but for `problems` broken links in _docs/doc.md. */
+function withProblems(t, problems) {
+  const links = Array.from({ length: problems }, (_, i) => `See [gone](gone-${i}.md).`).join('\n');
+  const { root } = tmpRepo(t, { ...docsBaseline(), '_docs/doc.md': `# Doc\n\n**Last Updated:** 2026-01-15 10:30 CET\n\n${links}\n` });
+  writeDocsRule(root);
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'rule');
+  return root;
+}
 
-  const run = p.baseline();
+test('session start: stores the problems there are as the start set, with the code version', (t) => {
+  const root = withProblems(t, 2);
+  const run = agentSession(root, SESSION).start();
   assert.equal(run.status, 0);
-  assert.equal(run.stdout, '');
-  const state = p.state();
-  assert.equal(state.version, 1);
-  assert.deepEqual(state.verified, { 'new.txt': p.hash('new.txt'), 'src/a.ts': p.hash('src/a.ts') });
-  assert.deepEqual(state.gaveUp, {});
-  assert.deepEqual(state.treeSnapshot, { 'new.txt': p.hash('new.txt'), 'other.txt': null, 'src/a.ts': p.hash('src/a.ts') });
+  const start = readJson(sessionPath(root, SESSION, 'start.json'));
+  assert.equal(start.taken_by, 'session-start');
+  assert.equal(typeof start.version, 'string');
+  assert.deepEqual(start.problems, [
+    { check: 'links', file: '_docs/doc.md', message: 'no such file: gone-0.md', count: 1 },
+    { check: 'links', file: '_docs/doc.md', message: 'no such file: gone-1.md', count: 1 },
+  ]);
 });
 
-test('baseline: writes once and never overwrites an existing state', (t) => {
-  const p = project(t);
-  p.baseline();
-  const first = readFileSync(path.join(p.root, STATE), 'utf8');
+test('session start: with 3 problems it prints one line naming them and honest-docs-check', (t) => {
+  const root = withProblems(t, 3);
+  const run = agentSession(root, SESSION).start();
+  assert.equal(run.stdout, 'honest-docs: 3 docs problems in this repo (not blocking); list them with honest-docs-check\n');
+});
 
-  p.write('src/a.ts', 'the agent broke this\n');
+test('session start: with none it prints nothing', (t) => {
+  const root = withProblems(t, 0);
+  const run = agentSession(root, SESSION).start();
+  assert.deepEqual([run.status, run.stdout, run.stderr], [0, '', '']);
+});
+
+test('session start: a resume, /clear or compaction keeps the start set and prints the line again', (t) => {
+  const root = withProblems(t, 1);
+  const session = agentSession(root, SESSION);
+  session.start();
+  const first = readFileSync(sessionPath(root, SESSION, 'start.json'), 'utf8');
+  // What the session broke since must not become a problem from before it.
+  writeFiles(root, { '_docs/doc.md': '# Doc\n\nSee [lost](lost.md).\n' });
   for (const source of ['resume', 'clear', 'compact']) {
-    assert.equal(p.baseline(source).status, 0);
-    assert.equal(readFileSync(path.join(p.root, STATE), 'utf8'), first, source);
+    const run = session.start(source);
+    assert.match(run.stdout, /^honest-docs: \d docs problems? in this repo/, source);
+    assert.equal(readFileSync(sessionPath(root, SESSION, 'start.json'), 'utf8'), first, source);
   }
-});
-
-test('baseline: another session gets its own state', (t) => {
-  const p = project(t);
-  p.baseline();
-  runHook('session-baseline', { session_id: 'session-2', source: 'startup' }, { root: p.root });
-  assert.ok(existsSync(path.join(p.root, 'artifacts/claude-hooks/honest-docs-session-2.json')));
 });
 
 test('reminder: names a doc when code it covers changes, once per doc per session', (t) => {
   const p = project(t);
-  p.baseline();
-
-  p.write('src/a.ts', '2\n');
-  const first = p.toolUse();
+  const first = p.session.write('src/a.ts', '2\n', 'Edit');
   assert.equal(first.status, 0);
   assert.equal(first.output.systemMessage, 'docs: check _docs/features/alpha.md');
   assert.equal(first.output.hookSpecificOutput.hookEventName, 'PostToolUse');
   assert.match(first.output.hookSpecificOutput.additionalContext, /^Code a doc lists in its `covers:` frontmatter changed:\nsrc\/a\.ts → _docs\/features\/alpha\.md\n/);
   assert.equal(p.state().docReminders['_docs/features/alpha.md'], 'reminded');
 
-  p.write('src/b.ts', '2\n');
-  assert.equal(p.toolUse().stdout, '');
-  p.write('src/a.ts', '3\n');
-  assert.equal(p.toolUse().stdout, '');
+  assert.equal(p.session.write('src/b.ts', '2\n').stdout, '');
+  assert.equal(p.session.bash(() => p.editor('src/a.ts', '3\n')).stdout, '');
 });
 
 test('reminder: a doc git ignores is never named', (t) => {
   const p = project(t);
-  p.write('.gitignore', '_docs/priv/\n');
+  p.editor('.gitignore', '_docs/priv/\n');
   mkdirSync(path.join(p.root, '_docs/priv'));
-  p.write('_docs/priv/notes.md', doc(['src/**']));
-  p.baseline();
-
-  p.write('src/a.ts', '2\n');
-  assert.equal(p.toolUse().output.systemMessage, 'docs: check _docs/features/alpha.md');
+  p.editor('_docs/priv/notes.md', doc(['src/**']));
+  assert.equal(p.session.write('src/a.ts', '2\n').output.systemMessage, 'docs: check _docs/features/alpha.md');
 });
 
-test('reminder: a deleted covered file is named as deleted', (t) => {
+test('reminder: a covered file a Bash call deletes is named as deleted', (t) => {
   const p = project(t);
-  p.baseline();
-  git(p.root, 'rm', '-q', 'lib/x.ts');
-  assert.match(p.toolUse().output.hookSpecificOutput.additionalContext, /lib\/x\.ts \(deleted\) → _docs\/features\/beta\.md/);
+  const run = p.session.bash(() => rmSync(path.join(p.root, 'lib/x.ts')));
+  assert.match(run.output.hookSpecificOutput.additionalContext, /lib\/x\.ts \(deleted\) → _docs\/features\/beta\.md/);
 });
 
 test('reminder: a doc the session changed stays quiet', (t) => {
   const p = project(t);
-  p.baseline();
-
-  p.write('_docs/features/beta.md', `${doc(['lib/*.ts'])}\nEdited.\n`);
-  assert.equal(p.toolUse().stdout, '');
+  assert.equal(p.session.write('_docs/features/beta.md', `${doc(['lib/*.ts'])}\nEdited.\n`).stdout, '');
   assert.equal(p.state().docReminders['_docs/features/beta.md'], 'edited');
-
-  p.write('lib/x.ts', '2\n');
-  assert.equal(p.toolUse().stdout, '');
+  assert.equal(p.session.write('lib/x.ts', '2\n').stdout, '');
 });
 
-test('reminder: a doc changed in the same step as its code stays quiet', (t) => {
+test('reminder: a doc changed in the same Bash call as its code stays quiet', (t) => {
   const p = project(t);
-  p.baseline();
-  p.write('_docs/features/alpha.md', `${doc(['src/**'])}\nEdited.\n`);
-  p.write('src/a.ts', '2\n');
-  assert.equal(p.toolUse().stdout, '');
-});
-
-test('reminder: work that predates the session is not a change', (t) => {
-  const p = project(t);
-  p.write('src/a.ts', 'wip\n');
-  p.baseline();
-  assert.equal(p.toolUse().stdout, '');
-  p.write('other.txt', '2\n');
-  assert.equal(p.toolUse().stdout, '');
-});
-
-test('reminder: without a baseline it does nothing', (t) => {
-  const p = project(t);
-  p.write('src/a.ts', '2\n');
-  const run = p.toolUse();
-  assert.equal(run.status, 0);
+  const run = p.session.bash(() => {
+    p.editor('_docs/features/alpha.md', `${doc(['src/**'])}\nEdited.\n`);
+    p.editor('src/a.ts', '2\n');
+  });
   assert.equal(run.stdout, '');
-  assert.equal(existsSync(path.join(p.root, STATE)), false);
+});
+
+test('reminder: only attributed changes count: an editor edit gets none, at its time or later', (t) => {
+  const p = project(t);
+  p.editor('src/a.ts', 'editor\n');
+  // A tool call that changes something else does not pick up the editor's edit.
+  assert.equal(p.session.write('other.txt', '2\n').stdout, '');
+  assert.equal(p.session.bash(() => p.editor('other.txt', '3\n')).stdout, '');
 });
 
 test('reminder: a new session names the doc again', (t) => {
   const p = project(t);
-  p.baseline();
-  p.write('src/a.ts', '2\n');
-  p.toolUse();
+  p.session.write('src/a.ts', '2\n');
+  const other = agentSession(p.root, 'session-2');
+  assert.equal(other.write('src/b.ts', '2\n', 'Edit').output.systemMessage, 'docs: check _docs/features/alpha.md');
+});
 
-  const other = (hook, payload) => runHook(hook, { session_id: 'session-2', ...payload }, { root: p.root });
-  other('session-baseline', { source: 'startup' });
-  p.write('src/b.ts', '2\n');
-  assert.equal(JSON.parse(other('doc-reminder', { tool_name: 'Edit' }).stdout).systemMessage, 'docs: check _docs/features/alpha.md');
+test('a doc with two problems from before the session: an Edit to it gets their count once, and the gate does not block', (t) => {
+  const root = withProblems(t, 2);
+  const session = agentSession(root, SESSION);
+  session.start();
+  const text = readFileSync(path.join(root, '_docs/doc.md'), 'utf8');
+
+  const edit = session.write('_docs/doc.md', `${text}More.\n`, 'Edit');
+  assert.equal(edit.output.systemMessage, undefined);
+  assert.equal(edit.output.hookSpecificOutput.additionalContext, '_docs/doc.md has 2 docs problems from before this session');
+  assert.equal(session.write('_docs/doc.md', `${text}More, again.\n`, 'Edit').stdout, '');
+
+  const stop = runHook('stop-gate', { session_id: SESSION, cwd: root, permission_mode: 'default' }, { root });
+  assert.equal(stop.status, 0, stop.stderr);
+  assert.equal(stop.stderr, '');
+});
+
+test('a reminded doc with problems from before the session gets their count beside the reminder', (t) => {
+  const p = project(t, { '_docs/features/alpha.md': `${doc(['src/**'])}\nSee [gone](gone.md).\n` });
+  p.session.start();
+  const run = p.session.write('src/a.ts', '2\n');
+  // The broken link and the missing Last Updated line.
+  assert.match(run.output.hookSpecificOutput.additionalContext, /session\.\n\n_docs\/features\/alpha\.md has 2 docs problems from before this session$/);
 });

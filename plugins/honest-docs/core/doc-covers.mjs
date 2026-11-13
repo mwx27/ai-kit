@@ -1,6 +1,6 @@
 // The `covers:` frontmatter of the docs in docsDir — root-anchored globs of the code each doc
-// describes. Read by core/reminder.mjs after every tool call and checked by scripts/docs-check.mjs,
-// so the two cannot disagree about what a doc covers.
+// describes. Read by core/reminder.mjs after a tool call changes files, by the gate for a deleted
+// file's glob, and checked by scripts/docs-check.mjs, so they cannot disagree about what a doc covers.
 //
 // scripts/context-budget.mjs has its own matcher on purpose: it reproduces Claude Code's unanchored
 // `paths:` matching, so the two are different semantics, not a duplicate.
@@ -11,7 +11,7 @@ import { docSet } from './doc-set.mjs';
 const escapeRe = (c) => (/[.+^${}()|[\]\\]/.test(c) ? `\\${c}` : c);
 
 /** Glob → RegExp for repo-relative POSIX paths, anchored at the root: **, *, ?, {a,b}. */
-function globToRegExp(glob) {
+export function globToRegExp(glob) {
   let re = '';
   for (let i = 0; i < glob.length; i++) {
     const c = glob[i];

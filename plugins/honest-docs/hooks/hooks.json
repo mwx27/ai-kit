@@ -6,20 +6,33 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/session-baseline.mjs"],
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs"],
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/pre-tool.mjs"],
+            "timeout": 10
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|Bash",
+        "matcher": "Edit|Write|NotebookEdit|Bash",
         "hooks": [
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/doc-reminder.mjs"],
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/post-tool.mjs"],
             "timeout": 10
           }
         ]
@@ -32,6 +45,19 @@
             "command": "node",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/instructions-log.mjs"],
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/post-tool.mjs"],
+            "timeout": 10
           }
         ]
       }

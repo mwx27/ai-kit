@@ -6,7 +6,7 @@ import { readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { logEvent } from '../core/log.mjs';
-import { PLUGIN_ROOT, PLUGIN_VERSION, docsBaseline, eventLog, git, readLines, runBin, runHook, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
+import { PLUGIN_ROOT, PLUGIN_VERSION, agentSession, docsBaseline, eventLog, git, readLines, runBin, runHook, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const HEADER_FIELDS = ['ts', 'event', 'pluginVersion', 'project', 'pluginRoot'];
 
@@ -73,51 +73,52 @@ test('it never throws, even when the folder cannot be created', (t) => {
   asHook('1', () => assert.doesNotThrow(() => logEvent(root, 'probe')));
 });
 
-test('the hooks and the docs-check the gate runs log their events; the instructions log does not', (t) => {
+test('the hooks and the docs-check they run log their events; the instructions log does not', (t) => {
   // Docs that pass docs-check, committed, so the gate gets as far as the guard and passes.
   const { root } = tmpRepo(t, { ...docsBaseline(), 'src/a.ts': '1\n' });
   writeDocsRule(root);
+  writeFileSync(path.join(root, '.claude/honest-docs.json'), JSON.stringify({ instructionsLog: true, guard: { command: ['true'] } }));
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'rule');
-  // Untracked, so the baseline has one dirty file to record.
-  writeFileSync(path.join(root, '.claude/honest-docs.json'), JSON.stringify({ instructionsLog: true, guard: { command: ['true'] } }));
 
-  runHook('session-baseline', { session_id: 's', source: 'startup' }, { root });
-  writeFileSync(path.join(root, 'src/a.ts'), '2\n');
+  const session = agentSession(root, 's');
+  session.start();
+  session.write('src/a.ts', '2\n', 'Edit');
+  session.bash(() => writeFileSync(path.join(root, 'src/b.ts'), '1\n'));
   runHook('stop-gate', { session_id: 's', permission_mode: 'default' }, { root });
   runHook('instructions-log', { session_id: 's', hook_event_name: 'InstructionsLoaded', file_path: path.join(root, 'CLAUDE.md'), load_reason: 'session_start' }, { root });
   // Not hooks: these write nothing.
   runBin('honest-docs-grep', ['x'], { cwd: root });
   runBin('honest-docs-check', [], { cwd: root });
 
-  // The gate runs docs-check before the guard, and that run logs too.
+  // SessionStart and the gate each run docs-check, and those runs log too.
   const logged = eventLog(root);
-  assert.deepEqual(logged.map((e) => e.event), ['baseline', 'docs-check', 'gate']);
+  assert.deepEqual(logged.map((e) => e.event), ['docs-check', 'session-start', 'attribution', 'attribution', 'docs-check', 'gate']);
   for (const e of logged) assert.deepEqual(Object.keys(e).slice(0, 5), HEADER_FIELDS);
   assert.deepEqual(
-    { ...logged[0], ts: undefined },
-    { ...logged[0], ts: undefined, written: true, source: 'startup', dirty: 1 }
+    { ...logged[1], ts: undefined },
+    { ...logged[1], ts: undefined, source: 'startup', written: true, problems: 0 }
   );
-  assert.equal(logged[1].problems, 0);
-  assert.equal(logged[2].outcome, 'pass');
-  assert.equal(logged[2].kind, 'ran');
-  // The config and src/a.ts; the log folder is the plugin's own, never a change.
-  assert.equal(logged[2].changed, 2);
-  assert.equal(logged[2].checked, 1);
+  assert.deepEqual([logged[2].tool, logged[2].paths, logged[3].tool, logged[3].paths], ['Edit', 1, 'Bash', 1]);
+  assert.equal(logged[4].problems, 0);
+  assert.equal(logged[5].outcome, 'pass');
+  assert.equal(logged[5].kind, 'ran');
+  assert.equal(logged[5].changed, 2);
+  assert.equal(logged[5].checked, 2);
   // Metadata only: no file content or path from the tree in any record.
-  assert.doesNotMatch(JSON.stringify(logged), /src\/a\.ts|CLAUDE\.md/);
+  assert.doesNotMatch(JSON.stringify(logged), /src\/[ab]\.ts|CLAUDE\.md/);
 });
 
-test('with a broken config the baseline and the reminder say nothing and log config-error in the default logDir', (t) => {
+test('with a broken config the session start and the tool hooks say nothing and log config-error in the default logDir', (t) => {
   const { root } = tmpRepo(t, { '.claude/honest-docs.json': '{ not json', 'src/a.ts': '1\n' });
 
-  const runs = [
-    runHook('session-baseline', { session_id: 's', source: 'startup' }, { root }),
-    runHook('doc-reminder', { session_id: 's', tool_name: 'Edit' }, { root }),
-  ];
+  const session = agentSession(root, 's');
+  const runs = [session.start(), session.write('src/a.ts', '2\n', 'Edit'), session.bash()];
   for (const run of runs) assert.deepEqual([run.status, run.stdout, run.stderr], [0, '', '']);
   assert.deepEqual(eventLog(root).map((e) => [e.event, e.reason]), [
-    ['baseline', 'config-error'],
-    ['reminder', 'config-error'],
+    ['session-start', 'config-error'],
+    ['attribution', 'config-error'],
+    ['attribution', 'config-error'],
+    ['attribution', 'config-error'],
   ]);
 });

@@ -1,14 +1,11 @@
-// What the working tree holds that HEAD does not — the file list the guard gate runs on, the
-// baseline core/baseline.mjs records at session start, and the snapshot core/reminder.mjs compares
-// after every tool call. Shared so the three cannot disagree about what "changed" means.
+// What the working tree holds that HEAD does not: the snapshot a Bash call's PreToolUse and
+// PostToolUse compare (core/attribution.mjs), and the hashes the guard gate keys its state by.
+// Shared so the two cannot disagree about what "changed" means.
 //
-// Git is the source rather than a record of the agent's own writes, because the agent also edits
-// through Bash (`printf >>`, `sed -i`, `mv`, `patch`), and a turn that did so left no record at all.
-//
-// The plugin's own folders (state and logs, config.ownDirs) are never a change, whatever the
-// project's .gitignore says.
+// The plugin's own folders (state, logs and the copy, config.ownDirs) are never a change, whatever
+// the project's .gitignore says.
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const MAX_BUFFER = 8 * 1024 * 1024;
@@ -76,9 +73,23 @@ export function treeSnapshot(root, excluded) {
 }
 
 /**
- * Modified (staged or not), added, untracked and rename destinations — the entries of
- * statusEntries() that have something on disk for the guard to check.
+ * path → hash of what is on disk for `files` (repo-relative); null for a path with no file there,
+ * a folder or a dangling symlink. Null when git cannot answer, as statusEntries.
  */
-export function changedFiles(root, excluded) {
-  return statusEntries(root, excluded)?.filter((entry) => entry.hash !== null) ?? null;
+export function hashFiles(root, files) {
+  const onDisk = files.filter((file) => {
+    try {
+      return statSync(path.join(root, file)).isFile();
+    } catch {
+      return false;
+    }
+  });
+  try {
+    const hashes = onDisk.length === 0 ? [] : git(root, ['hash-object', '--stdin-paths'], `${onDisk.join('\n')}\n`).trim().split('\n');
+    if (hashes.length !== onDisk.length) return null;
+    const hashOf = new Map(onDisk.map((file, index) => [file, hashes[index]]));
+    return new Map(files.map((file) => [file, hashOf.get(file) ?? null]));
+  } catch {
+    return null;
+  }
 }

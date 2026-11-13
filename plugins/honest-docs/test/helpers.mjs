@@ -128,3 +128,56 @@ ${fragment('docs-policy')}
 /** Writes the rule /init writes, rendered from the project's config, so docs-check's `init` passes. */
 export const writeDocsRule = (root) =>
   writeFiles(root, { '.claude/rules/docs.md': renderDocsRule(loadConfig(root)) });
+
+/** The session's state folder (core/session-state.mjs) under the default stateDir. */
+export const sessionPath = (root, session, file = '') => path.join(root, 'artifacts/claude-hooks/honest-docs', session, file);
+
+let toolCalls = 0;
+
+/**
+ * One agent session's tool-call hooks on `root`, fired as Claude Code fires them. `run(hook, payload)`
+ * runs one hook: the plugin's by default, a copy's in the copy tests.
+ *   start(source)            SessionStart
+ *   write(file, text, tool)  writes the file, then the tool's PostToolUse (Write by default)
+ *   bash(act, options)       PreToolUse, act(), then PostToolUse (or `event`); `pre: false` skips the Pre
+ *   tool(name, input)        a PostToolUse with that tool_input, nothing written
+ *   pre(id), post(id)        one Bash call's Pre or Post alone, to interleave calls
+ * Each returns the hook's run, with `output` the parsed stdout when it is JSON.
+ */
+export function agentSession(root, session, { run, cwd = root } = {}) {
+  run ??= (hook, payload) => runHook(hook, payload, { root });
+  const fire = (hook, payload) => {
+    const result = run(hook, { session_id: session, cwd, ...payload });
+    let output = null;
+    try {
+      output = JSON.parse(result.stdout);
+    } catch {
+      // Plain text, or nothing.
+    }
+    return { ...result, output };
+  };
+  return {
+    start: (source = 'startup') => fire('session-start', { hook_event_name: 'SessionStart', source }),
+    write(file, text, tool = 'Write') {
+      writeFiles(cwd, { [file]: text });
+      const key = tool === 'NotebookEdit' ? 'notebook_path' : 'file_path';
+      return fire('post-tool', { hook_event_name: 'PostToolUse', tool_name: tool, tool_use_id: `toolu_${++toolCalls}`, tool_input: { [key]: path.join(cwd, file) } });
+    },
+    bash(act = () => {}, { event = 'PostToolUse', pre = true, id = `toolu_${++toolCalls}` } = {}) {
+      const call = { tool_name: 'Bash', tool_use_id: id, tool_input: { command: 'fixture' } };
+      if (pre) fire('pre-tool', { hook_event_name: 'PreToolUse', ...call });
+      act();
+      return fire('post-tool', { hook_event_name: event, ...call, ...(event === 'PostToolUseFailure' ? { error: 'exit 1', is_interrupt: false } : {}) });
+    },
+    /** PostToolUse of `tool` with `toolInput` as given, nothing written. */
+    tool: (tool, toolInput) => fire('post-tool', { hook_event_name: 'PostToolUse', tool_name: tool, tool_use_id: `toolu_${++toolCalls}`, tool_input: toolInput }),
+    pre: (id) => fire('pre-tool', { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: id, tool_input: { command: 'fixture' } }),
+    post: (id) => fire('post-tool', { hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: id, tool_input: { command: 'fixture' } }),
+  };
+}
+
+/** The attributed.jsonl lines of `session`, parsed; [] when there are none. */
+export const attributedLines = (root, session) => {
+  const file = sessionPath(root, session, 'attributed.jsonl');
+  return existsSync(file) ? readLines(file).map((line) => JSON.parse(line)) : [];
+};
