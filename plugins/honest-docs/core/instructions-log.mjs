@@ -34,6 +34,7 @@ import path from 'node:path';
 import { ConfigError, loadConfig, skippedRoots } from './config.mjs';
 import { logEvent } from './log.mjs';
 import { posixPath } from './posix-path.mjs';
+import { hookRoot } from './root.mjs';
 
 const SKILLS_DIR = '.claude/skills/';
 
@@ -84,7 +85,8 @@ function lineBody(input, root, ignoredRoots) {
 /** Hook input → { exitCode }. Always exit 0. */
 export function instructionsLog(input) {
   if (!input) return { exitCode: 0 };
-  const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const root = hookRoot(input);
+  if (root === null) return { exitCode: 0 };
   let config;
   try {
     config = loadConfig(root);

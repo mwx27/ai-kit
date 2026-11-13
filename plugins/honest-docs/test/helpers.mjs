@@ -3,7 +3,7 @@
 // Shared by the *.test.mjs files: a throwaway git repo in os.tmpdir() per test, and runners for the
 // plugin's hooks and bin/ commands the way Claude Code and the agent's Bash call them.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -98,6 +98,12 @@ export function runBin(command, args, { cwd, env = {} }) {
 
 export const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 export const readLines = (file) => readFileSync(file, 'utf8').split('\n').filter(Boolean);
+
+/** The event log (core/log.mjs) under the default logDir of `root`, parsed; [] when there is none. */
+export const eventLog = (root) => {
+  const file = path.join(root, 'artifacts', 'logs', 'events.jsonl');
+  return existsSync(file) ? readLines(file).map((line) => JSON.parse(line)) : [];
+};
 
 /** `text` matched literally inside a RegExp: a Windows path's `\U` or `\A` breaks the pattern otherwise. */
 export const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

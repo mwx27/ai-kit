@@ -1,10 +1,10 @@
 // The instructions log (hooks/instructions-log.mjs): off by default; when on, one line per event in
 // the format references/instructions-log.md gives.
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { readLines, runHook, tmpRepo } from './helpers.mjs';
+import { eventLog, readLines, runHook, tmpRepo } from './helpers.mjs';
 
 const SESSION = 'abcdef12-3456-7890';
 const LOG = 'artifacts/logs/instructions-abcdef12.log';
@@ -80,11 +80,10 @@ test('on: what the log leaves out', (t) => {
 });
 
 test('a broken config: silent exit 0, nothing written, config-error in the event log', (t) => {
-  const { dir, root } = tmpRepo(t, { '.claude/honest-docs.json': '{ not json' });
-  const data = path.join(dir, 'data');
-  const run = runHook('instructions-log', { session_id: SESSION, ...events(root)[0] }, { root, env: { CLAUDE_PLUGIN_DATA: data } });
+  const { root } = tmpRepo(t, { '.claude/honest-docs.json': '{ not json' });
+  const run = runHook('instructions-log', { session_id: SESSION, ...events(root)[0] }, { root });
   assert.deepEqual([run.status, run.stdout, run.stderr], [0, '', '']);
-  assert.equal(existsSync(path.join(root, 'artifacts')), false);
-  const logged = readLines(path.join(data, 'events.jsonl')).map((line) => JSON.parse(line));
-  assert.deepEqual(logged.map((e) => [e.event, e.reason]), [['instructions-log', 'config-error']]);
+  // The event log, in the default logDir since the config cannot name one, and no instructions log.
+  assert.deepEqual(readdirSync(path.join(root, 'artifacts', 'logs')), ['events.jsonl']);
+  assert.deepEqual(eventLog(root).map((e) => [e.event, e.reason]), [['instructions-log', 'config-error']]);
 });

@@ -3,8 +3,9 @@
 //
 // It replaces the instruction telling the agent to remember to run the checks — a rule that costs
 // context in every session and is forgotten in the one where it matters. Nothing is reimplemented
-// here: it runs the plugin's scripts/docs-check.mjs, then the project's guard as configured in
-// `guard.command` (core/config.mjs), with HONEST_DOCS_SCRIPTS pointing at the plugin's scripts/.
+// here: it runs scripts/docs-check.mjs, then the project's guard as configured in `guard.command`
+// (core/config.mjs), with HONEST_DOCS_SCRIPTS pointing at the scripts/ beside the running code: the
+// plugin's, or the project's copy (core/version.mjs).
 //
 // docs-check runs first, on every stop with something to check, whatever changed: it scans the
 // whole docs tree, and a code change can break a doc as surely as a doc edit. A failure there blocks
@@ -49,6 +50,7 @@ import { changedFiles } from './changed-files.mjs';
 import { ConfigError, loadConfig, ownDirs } from './config.mjs';
 import { stampLastUpdated } from './last-updated.mjs';
 import { PLUGIN_ROOT, logEvent } from './log.mjs';
+import { hookRoot } from './root.mjs';
 import { sessionKey, sessionStore } from './session-state.mjs';
 
 /** Identical failures tolerated before the gate concedes and lets the stop through. */
@@ -112,7 +114,8 @@ function fileList(files) {
 /** Hook input → { stdout, stderr, exitCode }. Exit 2 with stderr blocks the stop. */
 export function gate(input) {
   const start = Date.now();
-  let root = process.env.CLAUDE_PROJECT_DIR || input?.cwd || process.cwd();
+  const root = hookRoot(input);
+  if (root === null) return { exitCode: 0 };
   let session = 'unknown';
   let logDir = null;
 
@@ -172,7 +175,7 @@ export function gate(input) {
       toCheck = toCheck.map((entry) => ({ ...entry, hash: fresh.get(entry.path) ?? entry.hash }));
     }
 
-    const scripts = path.join(process.env.CLAUDE_PLUGIN_ROOT || PLUGIN_ROOT, 'scripts');
+    const scripts = path.join(PLUGIN_ROOT, 'scripts');
     const command = config.guard.command;
     const hasGuard = Array.isArray(command) && command.length > 0;
     const guardCommand = hasGuard ? command.join(' ') : '';
