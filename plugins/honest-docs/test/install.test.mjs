@@ -111,10 +111,25 @@ function settingsSession(root, session, env = {}) {
   return { ...agent, stop, gateLog };
 }
 
-test('the hooks it merges mirror the plugin hooks/hooks.json, pointed at the copy', () => {
-  const plugin = readFileSync(path.join(PLUGIN_ROOT, 'hooks', 'hooks.json'), 'utf8');
-  const mirrored = JSON.parse(plugin.replaceAll('${CLAUDE_PLUGIN_ROOT}/hooks/', '${CLAUDE_PROJECT_DIR}/.claude/honest-docs/hooks/')).hooks;
-  assert.deepEqual(copyHooks(), mirrored);
+test('the plugin hooks.json holds only the notifier, and the hooks install merges are the copy machinery', () => {
+  assert.deepEqual(readJson(path.join(PLUGIN_ROOT, 'hooks', 'hooks.json')), {
+    hooks: {
+      SessionStart: [{ hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/hooks/notify.mjs'], timeout: 10 }] }],
+    },
+  });
+  const hook = (script, timeout) => ({ type: 'command', command: 'node', args: [`\${CLAUDE_PROJECT_DIR}/.claude/honest-docs/hooks/${script}`], timeout });
+  assert.deepEqual(copyHooks(), {
+    SessionStart: [{ hooks: [hook('session-start.mjs', 15)] }],
+    PreToolUse: [{ matcher: 'Bash', hooks: [hook('pre-tool.mjs', 10)] }],
+    PostToolUse: [
+      { matcher: 'Edit|Write|NotebookEdit|Bash', hooks: [hook('post-tool.mjs', 10)] },
+      { matcher: 'Edit|Write|Skill|Read', hooks: [hook('instructions-log.mjs', 5)] },
+    ],
+    PostToolUseFailure: [{ matcher: 'Bash', hooks: [hook('post-tool.mjs', 10)] }],
+    Stop: [{ hooks: [hook('stop-gate.mjs', 180)] }],
+    InstructionsLoaded: [{ hooks: [hook('instructions-log.mjs', 5)] }],
+    UserPromptExpansion: [{ hooks: [hook('instructions-log.mjs', 5)] }],
+  });
 });
 
 test('init on a 0.1.x project: copies the files, a manifest whose hashes match, merges the hooks, installed X', (t) => {
@@ -358,7 +373,7 @@ test('a hook edited by hand is kept, with a next: line showing both, and not ove
   assert.equal(readFileSync(file, 'utf8'), before);
   assert.match(
     run.stdout,
-    /^next: \.claude\/settings\.json: Stop hook hooks\/stop-gate\.mjs differs from what honest-docs \S+ writes: found \{.*"timeout":240.*\}, honest-docs writes \{.*"timeout":180.*\}; merge it by hand$/m
+    /^next: \.claude\/settings\.json: Stop hook hooks\/stop-gate\.mjs was edited by hand, so honest-docs \S+ left it as it is; tell the user it differs: found \{.*"timeout":240.*\}, honest-docs writes \{.*"timeout":180.*\}$/m
   );
 });
 
@@ -402,7 +417,7 @@ test('an update that drops a hook removes it where it is as written, and keeps i
   settings.hooks.Notification[0].hooks[0].timeout = 3;
   const kept = mergeHooks(settings, { previous, next, version: '0.2.1' });
   assert.deepEqual(kept.settings.hooks.Notification, settings.hooks.Notification);
-  assert.match(kept.nexts[0], /Notification hook hooks\/gone\.mjs differs .* honest-docs writes nothing; merge it by hand$/);
+  assert.match(kept.nexts[0], /Notification hook hooks\/gone\.mjs was edited by hand, .* honest-docs writes nothing$/);
 });
 
 test('a string-form command naming $CLAUDE_PROJECT_DIR/.claude/honest-docs/ is recognised as ours', () => {
@@ -412,7 +427,7 @@ test('a string-form command naming $CLAUDE_PROJECT_DIR/.claude/honest-docs/ is r
   // On init nothing is recorded, so it counts as edited by hand: kept, not doubled.
   const { settings, nexts } = mergeHooks({ hooks: { Stop: [{ hooks: [handler] }] } }, { previous: null, next: copyHooks(), version: '0.2.0' });
   assert.deepEqual(settings.hooks.Stop, [{ hooks: [handler] }]);
-  assert.match(nexts.join('\n'), /^\.claude\/settings\.json: Stop hook hooks\/stop-gate\.mjs differs/m);
+  assert.match(nexts.join('\n'), /^\.claude\/settings\.json: Stop hook hooks\/stop-gate\.mjs was edited by hand/m);
 });
 
 test('a diff shows the lines removed and added with context', () => {

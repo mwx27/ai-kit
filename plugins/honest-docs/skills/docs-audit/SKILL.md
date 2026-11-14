@@ -89,7 +89,7 @@ their lines (`ls`, `find -name`, `wc -l`).
    the issue as evidence: no source reading settles it.
 
 3. **Doc against doc.** For every symbol in a claim you changed, and every symbol in an F, run
-   `honest-docs-grep <symbol>…` and check the other docs say the same.
+   `node .claude/honest-docs/scripts/docs-grep.mjs <symbol>…` and check the other docs say the same.
 
 ## Before an F
 

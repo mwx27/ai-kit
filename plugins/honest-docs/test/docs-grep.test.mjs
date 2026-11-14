@@ -1,9 +1,9 @@
-// honest-docs-grep (scripts/docs-grep.mjs): every doc line naming a symbol, in the scanned places only.
+// scripts/docs-grep.mjs, run from the copy: every doc line naming a symbol, in the scanned places only.
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { runBin, tmpRepo, writeFiles } from './helpers.mjs';
+import { runScript, tmpRepo, writeFiles } from './helpers.mjs';
 
 function project(t) {
   return tmpRepo(t, {
@@ -18,7 +18,7 @@ function project(t) {
   });
 }
 
-const grep = (root, ...symbols) => runBin('honest-docs-grep', symbols, { cwd: root });
+const grep = (root, ...symbols) => runScript('docs-grep', symbols, { cwd: root });
 
 test('lists every scanned doc line naming the symbol, sorted by file', (t) => {
   const { root } = project(t);
@@ -83,7 +83,7 @@ test('no symbol: usage on stderr, exit 64', (t) => {
   const run = grep(root);
   assert.equal(run.status, 64);
   assert.equal(run.stdout, '');
-  assert.equal(run.stderr, 'usage: honest-docs-grep <symbol> [<symbol>...]\n');
+  assert.equal(run.stderr, 'usage: node .claude/honest-docs/scripts/docs-grep.mjs <symbol> [<symbol>...]\n');
 });
 
 test('a broken config: exit 2 with one line naming the file, no stack trace', (t) => {

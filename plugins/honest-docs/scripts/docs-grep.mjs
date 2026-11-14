@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Lists every line of the project's instruction docs that names a given symbol, so a change that
 // renamed, removed or changed the behavior of a name can fix the sentences it made false. Called
-// from the Docs policy in CLAUDE.md as `honest-docs-grep` (bin/).
+// from the Docs policy in CLAUDE.md as `node .claude/honest-docs/scripts/docs-grep.mjs`, from the
+// project's copy.
 //
 // The searched docs are the config's `scan` (core/config.mjs), files git ignores left out
 // (core/doc-set.mjs) — the root instructions name the command, not the folders.
 //
-// Usage:  honest-docs-grep <symbol> [<symbol>...]
+// Usage:  node .claude/honest-docs/scripts/docs-grep.mjs <symbol> [<symbol>...]
 //
 // Matching is a literal, case-sensitive substring test, line by line. Exit 0 whether or not
 // anything matched; 64 on a usage error, 2 on a broken config.
@@ -30,7 +31,7 @@ const MAX_LINE = 160;
 
 const symbols = process.argv.slice(2);
 if (symbols.length === 0) {
-  console.error('usage: honest-docs-grep <symbol> [<symbol>...]');
+  console.error('usage: node .claude/honest-docs/scripts/docs-grep.mjs <symbol> [<symbol>...]');
   process.exit(64);
 }
 

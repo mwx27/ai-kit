@@ -3,7 +3,8 @@
 //
 // Each runs a script of the copy in exec form — "command": "node", "args":
 // ["${CLAUDE_PROJECT_DIR}/.claude/honest-docs/hooks/<x>.mjs"] — with the events, matchers and
-// timeouts of the plugin's own hooks/hooks.json.
+// timeouts in HOOK_SET below, the only list of them. The plugin's own hooks/hooks.json holds only its
+// notifier (core/notify.mjs).
 //
 // A handler is ours when an `args` element, or the `command` string, names the copy's folder under
 // ${CLAUDE_PROJECT_DIR} or $CLAUDE_PROJECT_DIR; it is matched to what honest-docs writes by event,
@@ -18,7 +19,7 @@ import { COPY_DIR } from './config.mjs';
 
 export const SETTINGS_FILE = '.claude/settings.json';
 
-/** [event, matcher, script under the copy, timeout] — as in hooks/hooks.json. */
+/** [event, matcher, script under the copy, timeout]. */
 const HOOK_SET = [
   ['SessionStart', null, 'hooks/session-start.mjs', 15],
   ['PreToolUse', 'Bash', 'hooks/pre-tool.mjs', 10],
@@ -107,8 +108,8 @@ export function mergeHooks(settings, { previous, next, version }) {
         if (now && canonical(handler) === canonical(now)) return [handler];
         if (was.has(key) && canonical(handler) === canonical(was.get(key))) return now ? [structuredClone(now)] : [];
         nexts.push(
-          `${label(event, group.matcher, script)} differs from what honest-docs ${version} writes: ` +
-            `found ${canonical(handler)}, honest-docs writes ${now ? canonical(now) : 'nothing'}; merge it by hand`
+          `${label(event, group.matcher, script)} was edited by hand, so honest-docs ${version} left it as it is; ` +
+            `tell the user it differs: found ${canonical(handler)}, honest-docs writes ${now ? canonical(now) : 'nothing'}`
         );
         return [handler];
       });

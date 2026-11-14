@@ -12,7 +12,7 @@ import { countByKey, docsCheckCommand, runDocsCheck } from './problems.mjs';
 import { hookRoot } from './root.mjs';
 import { readStartSet, sessionDir, sessionKey, writeStartSet } from './session-state.mjs';
 
-// Within the hook's 15 s in hooks/hooks.json.
+// Within the hook's 15 s in core/settings-merge.mjs.
 const DOCS_CHECK_TIMEOUT_MS = 12_000;
 
 /** Hook input → { stdout, exitCode }. Always exit 0. */

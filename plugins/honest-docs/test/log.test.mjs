@@ -6,7 +6,7 @@ import { readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { logEvent } from '../core/log.mjs';
-import { PLUGIN_ROOT, PLUGIN_VERSION, agentSession, docsBaseline, eventLog, git, readLines, runBin, runHook, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
+import { PLUGIN_ROOT, PLUGIN_VERSION, agentSession, docsBaseline, eventLog, git, readLines, runScript, runHook, tmpRepo, writeCopy, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const HEADER_FIELDS = ['ts', 'event', 'pluginVersion', 'project', 'pluginRoot'];
 
@@ -32,10 +32,11 @@ test('outside a hook nothing is written', (t) => {
 
 test('docs-check and docs-grep run from a terminal write no event log', (t) => {
   const { dir, root } = tmpRepo(t, { 'package.json': '{}', 'CLAUDE.md': '# x\n' });
-  runBin('honest-docs-check', [], { cwd: root });
-  runBin('honest-docs-grep', ['x'], { cwd: root });
+  writeCopy(root);
+  runScript('docs-check', [], { cwd: root });
+  runScript('docs-grep', ['x'], { cwd: root });
   assert.deepEqual(readdirSync(dir), ['repo']);
-  assert.deepEqual(readdirSync(root).sort(), ['.git', '.gitkeep', 'CLAUDE.md', 'package.json']);
+  assert.deepEqual(readdirSync(root).sort(), ['.claude', '.git', '.gitkeep', 'CLAUDE.md', 'package.json']);
 });
 
 test('from a hook: one line in <logDir>/events.jsonl, the header fields first, then the metadata', (t) => {
@@ -88,8 +89,8 @@ test('the hooks and the docs-check they run log their events; the instructions l
   runHook('stop-gate', { session_id: 's', permission_mode: 'default' }, { root });
   runHook('instructions-log', { session_id: 's', hook_event_name: 'InstructionsLoaded', file_path: path.join(root, 'CLAUDE.md'), load_reason: 'session_start' }, { root });
   // Not hooks: these write nothing.
-  runBin('honest-docs-grep', ['x'], { cwd: root });
-  runBin('honest-docs-check', [], { cwd: root });
+  runScript('docs-grep', ['x'], { cwd: root });
+  runScript('docs-check', [], { cwd: root });
 
   // SessionStart and the gate each run docs-check, and those runs log too.
   const logged = eventLog(root);
