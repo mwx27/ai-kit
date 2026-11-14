@@ -61,8 +61,8 @@ SemVer, `0.x` until an interface settles. Each plugin owns one `CHANGELOG.md`
 ([Keep a Changelog](https://keepachangelog.com/)), shared by its skills. A version bump
 changes `version` in `.claude-plugin/plugin.json` and adds a `CHANGELOG.md` entry. Only a
 skill that states its own version (cv-bullets) also carries a `Current version:` footer in
-its `SKILL.md`, bumped with them; code that needs the version reads `plugin.json`, or, in a copy installed
-into a project, that copy's `manifest.json`.
+its `SKILL.md`, bumped with them; code that needs the version reads `plugin.json`, or, in a
+copy installed into a project, that copy's `manifest.json`.
 
 ## No personal data in skills
 
