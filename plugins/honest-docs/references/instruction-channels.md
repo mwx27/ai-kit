@@ -29,10 +29,10 @@ The channels differ in _when_ they enter context, and every trap below follows f
 - **Skills** — a skill the model may invoke loads when its `description` in the frontmatter matches
   the task, and one with `disable-model-invocation` loads only when the user types its `/name`
   _(documented)_; all three of this plugin's skills, `/honest-docs:docs-audit`, `/honest-docs:init`
-  and `/honest-docs:update`, are such. A description that drifts from the body raises no error: the skill simply does not fire.
-  With the instruction log on, a Skill call and a typed `/name` each leave a `skill:` line, and so
-  does a `Read` of a file under the project's own `.claude/skills/`, so a project skill that was
-  never invoked shows as an absence there and nowhere else.
+  and `/honest-docs:update`, are such. A description that drifts from the body raises no error: the
+  skill simply does not fire. With the instruction log on, a Skill call and a typed `/name` each
+  leave a `skill:` line, and so does a `Read` of a file under the project's own `.claude/skills/`,
+  so a project skill that was never invoked shows as an absence there and nowhere else.
 - **The doc reminder** — pushed at the moment of a change, not pulled by a read: after an Edit,
   Write or Bash call that changed a file some doc lists in `covers:`, a `PostToolUse` hook names
   that doc to the agent, once per doc per session ([`hooks.md`](hooks.md)). It carries the doc's
@@ -64,8 +64,9 @@ four mechanisms:
   not exist, and nobody sees the moment it stops matching the code ([above](#when-each-kind-loads)).
 - **A code change that points at its doc.** `covers:` ties a doc to the code it describes, and a
   hook names the doc when that code changes ([`hooks.md`](hooks.md)). The reverse runs by hand:
-  `node .claude/honest-docs/scripts/docs-grep.mjs` lists every line of the docs and rules that names a given symbol, and the docs
-  policy `/honest-docs:init` puts in `CLAUDE.md` has the agent run it after a behavior change.
+  `node .claude/honest-docs/scripts/docs-grep.mjs` lists every line of the docs and rules that names
+  a given symbol, and the docs policy `/honest-docs:init` puts in `CLAUDE.md` has the agent run it
+  after a behavior change.
 
 **Delivery is not truth.** A rule can arrive in every session and be false; none of the four
 mechanisms checks what a sentence claims about the code. The last one only chooses the moment

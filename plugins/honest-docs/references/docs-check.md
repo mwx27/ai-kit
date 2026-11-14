@@ -47,7 +47,8 @@ formatter may rewrap it. A fragment's current version is the newest file in
 `.claude/honest-docs/templates/fragments/<name>/` not above the copy's version, and it counts as present
 when its words appear in order with any whitespace between them, so a rewrap passes and a changed
 word does not. Every problem it reports names the rule or the fragment that differs, and all but a
-fragment present twice say to run `/honest-docs:init`.
+fragment present twice say what to run: `/honest-docs:update` where the project holds a copy,
+`/honest-docs:init` where it does not.
 
 `covers` asks git for tracked plus untracked-but-not-ignored files, so a doc written with a feature
 not yet added passes, and drops what is gone from disk, so a doc outliving its deleted code fails

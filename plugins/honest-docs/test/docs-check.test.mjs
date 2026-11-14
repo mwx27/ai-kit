@@ -1,12 +1,13 @@
 // scripts/docs-check.mjs, run from the copy: a clean tree passes, and each of the eight categories
 // fails on its own when one thing in an otherwise clean tree is broken.
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
 import { renderDocsRule } from '../core/init.mjs';
-import { PLUGIN_VERSION, fragment, fragmentVersion, git, runScript, tmpRepo, writeFiles } from './helpers.mjs';
+import { PLUGIN_ROOT, PLUGIN_VERSION, cleanEnv, fragment, fragmentVersion, git, runScript, tmpRepo, writeFiles } from './helpers.mjs';
 
 const CHECKS = ['links', 'anchors', 'paths', 'scripts', 'index', 'covers', 'updated', 'init'];
 
@@ -261,13 +262,13 @@ test('init: docs.md rewrapped by a formatter, same words, passes', (t) => {
 test('init: docs.md with a changed text and the current stamp', (t) => {
   const { root } = cleanProject(t);
   edit(root, '.claude/rules/docs.md', (text) => text.replace('One fact, one home', 'One fact, two homes'));
-  assertOnly(check(root), 'init', '.claude/rules/docs.md  differs from the rule this plugin writes — run /honest-docs:init');
+  assertOnly(check(root), 'init', '.claude/rules/docs.md  differs from the rule this plugin writes — run /honest-docs:update');
 });
 
 test('init: docs.md with a line added after the stamp', (t) => {
   const { root } = cleanProject(t);
   edit(root, '.claude/rules/docs.md', (text) => `${text}\nA line added by hand.\n`);
-  assertOnly(check(root), 'init', '.claude/rules/docs.md  differs from the rule this plugin writes — run /honest-docs:init');
+  assertOnly(check(root), 'init', '.claude/rules/docs.md  differs from the rule this plugin writes — run /honest-docs:update');
 });
 
 test('init: docs.md missing', (t) => {
@@ -276,13 +277,33 @@ test('init: docs.md missing', (t) => {
   const run = check(root);
   // The Rules section still links it, so links and index report it as well.
   assert.equal(run.status, 1);
-  assert.ok(run.stderr.includes('\n    .claude/rules/docs.md  missing — run /honest-docs:init\n'));
+  assert.ok(run.stderr.includes('\n    .claude/rules/docs.md  missing — run /honest-docs:update\n'));
 });
 
 test('init: a CLAUDE.md fragment missing', (t) => {
   const { root } = cleanProject(t);
   edit(root, 'CLAUDE.md', (text) => text.replace(fragment('read-line'), 'Read files however you like.'));
-  assertOnly(check(root), 'init', `CLAUDE.md  no ${fragmentVersion('read-line')} read-line fragment — run /honest-docs:init`);
+  assertOnly(check(root), 'init', `CLAUDE.md  no ${fragmentVersion('read-line')} read-line fragment — run /honest-docs:update`);
+});
+
+// check() runs docs-check from the copy it puts in the project, so the tests above name update. Without
+// a copy in the project, init is the fix: these run the plugin's own docs-check.
+const checkWithoutCopy = (root) => {
+  const run = spawnSync(process.execPath, [path.join(PLUGIN_ROOT, 'scripts', 'docs-check.mjs')], { cwd: root, encoding: 'utf8', env: cleanEnv() });
+  assert.equal(existsSync(path.join(root, '.claude/honest-docs')), false);
+  return run;
+};
+
+test('init: docs.md changed, in a project without a copy, says to run init', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, '.claude/rules/docs.md', (text) => text.replace('One fact, one home', 'One fact, two homes'));
+  assertOnly(checkWithoutCopy(root), 'init', '.claude/rules/docs.md  differs from the rule this plugin writes — run /honest-docs:init');
+});
+
+test('init: a CLAUDE.md fragment missing, in a project without a copy, says to run init', (t) => {
+  const { root } = cleanProject(t);
+  edit(root, 'CLAUDE.md', (text) => text.replace(fragment('read-line'), 'Read files however you like.'));
+  assertOnly(checkWithoutCopy(root), 'init', `CLAUDE.md  no ${fragmentVersion('read-line')} read-line fragment — run /honest-docs:init`);
 });
 
 test('init: an older version of a fragment counts as missing', (t) => {
@@ -290,7 +311,7 @@ test('init: an older version of a fragment counts as missing', (t) => {
   edit(root, 'CLAUDE.md', (text) => text.replace(fragment('docs-policy'), fragment('docs-policy', 'pre-0.1.0')));
   const run = check(root);
   assert.equal(run.status, 1);
-  assert.ok(run.stderr.includes(`\n    CLAUDE.md  no ${fragmentVersion('docs-policy')} docs-policy fragment — run /honest-docs:init\n`));
+  assert.ok(run.stderr.includes(`\n    CLAUDE.md  no ${fragmentVersion('docs-policy')} docs-policy fragment — run /honest-docs:update\n`));
 });
 
 test('scripts: without package.json every npm run a doc names is a problem', (t) => {
@@ -576,8 +597,8 @@ test('--json lists every finding with check, file, line, message, target and rel
     p('index', 'CLAUDE.md', 0, 'Rules index lists a rule that is gone: .claude/rules/x.md', null, ['.claude/rules/x.md']),
     p('covers', '_docs/tools/c.md', 0, 'covers: declared, but no glob could be read from it', null, []),
     p('covers', alpha, 0, 'covers matches no file: lib/**', null, []),
-    p('init', '.claude/rules/docs.md', 0, 'differs from the rule this plugin writes — run /honest-docs:init', null, ['.claude/honest-docs.json']),
-    p('init', 'CLAUDE.md', 0, `no ${fragmentVersion('docs-policy')} docs-policy fragment — run /honest-docs:init`, null, []),
+    p('init', '.claude/rules/docs.md', 0, 'differs from the rule this plugin writes — run /honest-docs:update', null, ['.claude/honest-docs.json']),
+    p('init', 'CLAUDE.md', 0, `no ${fragmentVersion('docs-policy')} docs-policy fragment — run /honest-docs:update`, null, []),
   ]);
 
   // The same problems as the text output, which is unchanged.

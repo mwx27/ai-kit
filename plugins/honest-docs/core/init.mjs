@@ -45,6 +45,7 @@ import { CONFIG_FILE, COPY_DIR } from './config.mjs';
 import { docSet } from './doc-set.mjs';
 import { LAST_UPDATED_LINE, lastUpdatedLine } from './last-updated.mjs';
 import { PLUGIN_ROOT, pluginVersion } from './log.mjs';
+import { MANIFEST } from './version.mjs';
 
 export const DOCS_RULE = '.claude/rules/docs.md';
 export const FRAGMENTS = ['read-line', 'docs-policy'];
@@ -330,11 +331,12 @@ const ruleWords = (text) => words(text.trimEnd().split('\n').slice(0, -1).join('
 /**
  * What docs-check reports as `init`: `{ file, message, related }` per problem, `related` the other
  * files whose change can cause it (the config renders the rule). It compares text, not version
- * numbers, so a plugin update that changes neither the rule nor a fragment reports nothing.
+ * numbers, so a plugin update that changes neither the rule nor a fragment reports nothing. The fix
+ * it names is /honest-docs:update where the project holds a copy, since init refuses there.
  */
 export function checkInit(root, config) {
   const problems = [];
-  const rerun = 'run /honest-docs:init';
+  const rerun = existsSync(path.join(root, COPY_DIR, MANIFEST)) ? 'run /honest-docs:update' : 'run /honest-docs:init';
   const rulePath = path.join(root, DOCS_RULE);
   if (!existsSync(rulePath)) {
     problems.push({ file: DOCS_RULE, message: `missing — ${rerun}`, related: [CONFIG_FILE] });
