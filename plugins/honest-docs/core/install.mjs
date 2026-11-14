@@ -1,9 +1,9 @@
 // /honest-docs:init and /honest-docs:update: put the checks into the project, or bring them to the
 // plugin's version (scripts/install.mjs).
 //
-//   .claude/honest-docs/    the copy the hooks and scripts run from: core/, hooks/*.mjs,
-//                           scripts/docs-check.mjs and docs-grep.mjs, templates/ (checkInit renders
-//                           templates/docs.md), and manifest.json — the version, the sha256 of each
+//   .claude/honest-docs/    the copy the hooks and scripts run from: core/ and hooks/*.mjs but the
+//                           plugin's notifier, scripts/docs-check.mjs and docs-grep.mjs, templates/
+//                           (checkInit renders templates/docs.md), and manifest.json — the version, the sha256 of each
 //                           file after \r\n → \n, and the hooks merged into settings.json
 //   .claude/settings.json   the copy's hooks, merged (core/settings-merge.mjs)
 //   .prettierignore         `.claude/honest-docs/` appended when the file exists and nothing covers it
@@ -45,11 +45,14 @@ function filesUnder(base, dir) {
     .sort();
 }
 
+/** The plugin's own hook (core/notify.mjs): it checks the copy, so the copy does not carry it. */
+const PLUGIN_ONLY = ['core/notify.mjs', 'hooks/notify.mjs'];
+
 /** What the copy holds, as Map of path → text, read from the running plugin. */
 export function copySources() {
   const files = [
-    ...filesUnder(PLUGIN_ROOT, 'core'),
-    ...filesUnder(PLUGIN_ROOT, 'hooks').filter((f) => /^hooks\/[^/]+\.mjs$/.test(f)),
+    ...filesUnder(PLUGIN_ROOT, 'core').filter((f) => !PLUGIN_ONLY.includes(f)),
+    ...filesUnder(PLUGIN_ROOT, 'hooks').filter((f) => /^hooks\/[^/]+\.mjs$/.test(f) && !PLUGIN_ONLY.includes(f)),
     'scripts/docs-check.mjs',
     'scripts/docs-grep.mjs',
     ...filesUnder(PLUGIN_ROOT, 'templates'),

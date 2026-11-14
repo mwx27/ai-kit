@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { PLUGIN_ROOT, agentSession, docsBaseline, escapeRegExp, eventLog, git, readJson, readLines, runHook, sessionPath, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
+import { COPY, PLUGIN_ROOT, agentSession, docsBaseline, escapeRegExp, eventLog, git, readJson, readLines, runHook, sessionPath, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const SESSION = 'gate-session';
 const STATE = `artifacts/claude-hooks/honest-docs/${SESSION}/state.json`;
@@ -89,7 +89,7 @@ test('pass: the guard gets the changed files, the gate records them as verified'
 
   const [call] = p.calls();
   assert.deepEqual(call.args, ['--changed', 'src/a.ts']);
-  assert.equal(call.scripts, path.join(PLUGIN_ROOT, 'scripts'));
+  assert.equal(call.scripts, path.join(p.root, COPY, 'scripts'));
   assert.equal(call.cwd, p.root);
 
   const state = p.state();
@@ -133,7 +133,7 @@ test('nothing attributed runs nothing, even with a dirty tree and a broken doc',
   assert.equal(eventLog(p.root).filter((e) => e.event === 'docs-check').length, 1);
 });
 
-test('fail with GUARD_FAIL check=docs from the guard: blocks and points at honest-docs-check', (t) => {
+test('fail with GUARD_FAIL check=docs from the guard: blocks and points at the copy docs-check', (t) => {
   const p = project(t);
   p.write('src/a.ts', 'export const a = 2;\n');
   const run = p.stop({ exit: 1, output: 'links (1)\n  _docs/x.md:3  no such file: y.md\nGUARD_FAIL check=docs\n' });
@@ -146,7 +146,7 @@ test('fail with GUARD_FAIL check=docs from the guard: blocks and points at hones
       '  src/a.ts\n' +
       '    links (1)\n' +
       '      _docs/x.md:3  no such file: y.md\n' +
-      'Fix it and stop again. To reproduce: honest-docs-check\n'
+      'Fix it and stop again. To reproduce: node .claude/honest-docs/scripts/docs-check.mjs\n'
   );
   assert.match(run.message, /^docs-check, guard --changed: 1 file, /);
   assert.equal(p.state().failure.check, 'docs');
@@ -214,13 +214,13 @@ test('the third identical failure lets the stop through and records gaveUp', (t)
   assert.equal(p.stop({ exit: 1, output: FAIL_OUTPUT }).status, 2);
 });
 
-test('giving up on check=docs points at honest-docs-check', (t) => {
+test('giving up on check=docs points at the copy docs-check', (t) => {
   const p = project(t);
   p.write('src/a.ts', 'export const a = 2;\n');
   for (let i = 0; i < 2; i++) p.stop({ exit: 1, output: 'GUARD_FAIL check=docs\n' });
   const run = p.stop({ exit: 1, output: 'GUARD_FAIL check=docs\n' });
   assert.equal(run.status, 0);
-  assert.match(run.message, /run `honest-docs-check` to see it\.$/);
+  assert.match(run.message, /run `node \.claude\/honest-docs\/scripts\/docs-check\.mjs` to see it\.$/);
 });
 
 test('failures that differ only in timings, colour and log stamps count as identical', (t) => {
@@ -357,23 +357,23 @@ test('no guard.command: a link the session breaks blocks, as check docs, listing
     'Guard gate: docs failed on 1 changed file(s).\n' +
       '  _docs/doc.md\n' +
       '    _docs/doc.md:5  no such file: gone.md\n' +
-      'Fix it and stop again. To reproduce: honest-docs-check\n'
+      'Fix it and stop again. To reproduce: node .claude/honest-docs/scripts/docs-check.mjs\n'
   );
-  assert.ok(run.stderr.endsWith('Fix it and stop again. To reproduce: honest-docs-check\n'), run.stderr);
+  assert.ok(run.stderr.endsWith('Fix it and stop again. To reproduce: node .claude/honest-docs/scripts/docs-check.mjs\n'), run.stderr);
   assert.match(run.message, /^docs-check: 1 file, \d+\.\ds$/);
   assert.equal(p.state().failure.check, 'docs');
   assert.deepEqual(p.state().verified, {});
   assert.match(p.gateLog()[0], / {2}ran {2}changed=1 checked=1 {2}ms=\d+ {2}fail {2}docs$/);
 });
 
-test('no guard.command: the third identical docs failure gives up and points at honest-docs-check', (t) => {
+test('no guard.command: the third identical docs failure gives up and points at the copy docs-check', (t) => {
   const p = project(t, { guard: null, files: { '_docs/doc.md': GOOD_DOC } });
   p.write('_docs/doc.md', BROKEN_DOC);
   assert.equal(p.stop().status, 2);
   assert.equal(p.stop().status, 2);
   const run = p.stop();
   assert.equal(run.status, 0);
-  assert.match(run.message, /^docs-check: 1 file, \d+\.\ds - docs still fails after 3 identical attempts, .*run `honest-docs-check` to see it\.$/);
+  assert.match(run.message, /^docs-check: 1 file, \d+\.\ds - docs still fails after 3 identical attempts, .*run `node \.claude\/honest-docs\/scripts\/docs-check\.mjs` to see it\.$/);
   assert.deepEqual(p.state().gaveUp, { '_docs/doc.md': p.hash('_docs/doc.md') });
   // A give-up adds nothing to the start set: the problem stays new to this session.
   assert.deepEqual(readJson(sessionPath(p.root, SESSION, 'start.json')).problems, []);
@@ -445,7 +445,7 @@ test('old path: broken docs block as check docs before the guard runs', (t) => {
   p.write('_docs/doc.md', BROKEN_DOC);
   const run = p.stop();
   assert.equal(run.status, 2);
-  assert.ok(run.stderr.endsWith('To reproduce: honest-docs-check\n'), run.stderr);
+  assert.ok(run.stderr.endsWith('To reproduce: node .claude/honest-docs/scripts/docs-check.mjs\n'), run.stderr);
   assert.equal(p.calls().length, 0);
   assert.equal(p.state().failure.check, 'docs');
 });
@@ -626,7 +626,7 @@ test('an editor edit that breaks a link does not block; the user is told of the 
   const run = p.stop();
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stderr, '');
-  assert.match(run.message, /^docs-check: 1 file, \d+\.\ds - 1 new docs problem not from this session \(`honest-docs-check` lists them\)$/);
+  assert.match(run.message, /^docs-check: 1 file, \d+\.\ds - 1 new docs problem not from this session \(`node \.claude\/honest-docs\/scripts\/docs-check\.mjs` lists them\)$/);
 });
 
 test('a problem from before the session in a doc the session edits does not block', (t) => {

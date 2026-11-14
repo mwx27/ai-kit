@@ -49,10 +49,10 @@ test('session start: stores the problems there are as the start set, with the co
   ]);
 });
 
-test('session start: with 3 problems it prints one line naming them and honest-docs-check', (t) => {
+test('session start: with 3 problems it prints one line naming them and the copy docs-check', (t) => {
   const root = withProblems(t, 3);
   const run = agentSession(root, SESSION).start();
-  assert.equal(run.stdout, 'honest-docs: 3 docs problems in this repo (not blocking); list them with honest-docs-check\n');
+  assert.equal(run.stdout, 'honest-docs: 3 docs problems in this repo (not blocking); list them with node .claude/honest-docs/scripts/docs-check.mjs\n');
 });
 
 test('session start: with none it prints nothing', (t) => {

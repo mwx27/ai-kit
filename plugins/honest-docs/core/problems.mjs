@@ -16,11 +16,9 @@ import path from 'node:path';
 import { CONFIG_FILE, COPY_DIR } from './config.mjs';
 import { globToRegExp } from './doc-covers.mjs';
 import { PLUGIN_ROOT } from './log.mjs';
-import { isCopy } from './version.mjs';
 
-/** What the agent or the user runs to list the problems: from a copy, its script; else bin/. */
-export const docsCheckCommand = (codeRoot = PLUGIN_ROOT) =>
-  isCopy(codeRoot) ? `node ${COPY_DIR}/scripts/docs-check.mjs` : 'honest-docs-check';
+/** What the agent or the user runs, from the project root, to list the problems. */
+export const docsCheckCommand = () => `node ${COPY_DIR}/scripts/docs-check.mjs`;
 
 /**
  * docs-check --json from the scripts/ of `codeRoot` (the running code by default) → { problems } or

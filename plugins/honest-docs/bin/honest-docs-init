@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-# Installs the checks into the project (/honest-docs:init). Run from anywhere inside the project.
-exec node "$(dirname "${BASH_SOURCE[0]}")/../scripts/install.mjs" --mode init "$@"

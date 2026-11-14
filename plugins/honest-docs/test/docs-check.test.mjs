@@ -1,4 +1,4 @@
-// honest-docs-check (scripts/docs-check.mjs): a clean tree passes, and each of the eight categories
+// scripts/docs-check.mjs, run from the copy: a clean tree passes, and each of the eight categories
 // fails on its own when one thing in an otherwise clean tree is broken.
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
 import { renderDocsRule } from '../core/init.mjs';
-import { PLUGIN_VERSION, fragment, fragmentVersion, git, runBin, tmpRepo, writeFiles } from './helpers.mjs';
+import { PLUGIN_VERSION, fragment, fragmentVersion, git, runScript, tmpRepo, writeFiles } from './helpers.mjs';
 
 const CHECKS = ['links', 'anchors', 'paths', 'scripts', 'index', 'covers', 'updated', 'init'];
 
@@ -60,7 +60,7 @@ function cleanProject(t) {
   return project;
 }
 
-const check = (root) => runBin('honest-docs-check', [], { cwd: root });
+const check = (root) => runScript('docs-check', [], { cwd: root });
 
 const edit = (root, file, change) => writeFileSync(path.join(root, file), change(readFileSync(path.join(root, file), 'utf8')));
 
@@ -84,7 +84,7 @@ test('a clean project passes', (t) => {
 
 test('it runs from a subfolder of the project', (t) => {
   const { root } = cleanProject(t);
-  const run = runBin('honest-docs-check', [], { cwd: path.join(root, 'src') });
+  const run = runScript('docs-check', [], { cwd: path.join(root, 'src') });
   assert.equal(run.status, 0, run.stderr);
 });
 
@@ -513,7 +513,7 @@ for (const [text, detail] of [
   });
 }
 
-const checkJson = (root) => runBin('honest-docs-check', ['--json'], { cwd: root });
+const checkJson = (root) => runScript('docs-check', ['--json'], { cwd: root });
 
 /** The problems --json reports, after asserting it exited 0 with nothing on stderr. */
 function jsonProblems(run) {

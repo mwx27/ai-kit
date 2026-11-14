@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import { loadConfig } from '../core/config.mjs';
 import { fragmentVersions, renderDocsRule } from '../core/init.mjs';
 import { lastUpdatedLine } from '../core/last-updated.mjs';
-import { PLUGIN_VERSION, fragment, fragmentVersion, git, runBin, runInstall, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
+import { PLUGIN_VERSION, fragment, fragmentVersion, git, runScript, runInstall, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const HEAD = '# Project\n\n## CRITICAL\n\n- Keep it short.\n- ';
 const MIDDLE = '\n\n## Docs\n\n';
@@ -171,11 +171,11 @@ test('no CLAUDE.md: exit 1, nothing written', (t) => {
 test('init leaves a tree that docs-check passes on the init category', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': `${before()}\n## Rules\n\n- [docs](.claude/rules/docs.md)\n`, 'package.json': '{}' });
   init(root);
-  const run = runBin('honest-docs-check', [], { cwd: root });
+  const run = runScript('docs-check', [], { cwd: root });
   assert.doesNotMatch(run.stderr, /^ {2}init \(/m);
   // Changing its text by hand afterwards is what docs-check flags.
   writeFileSync(path.join(root, '.claude/rules/docs.md'), read(root, '.claude/rules/docs.md').replace('One fact, one home', 'One fact'));
-  assert.match(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}init \(1\)$/m);
+  assert.match(runScript('docs-check', [], { cwd: root }).stderr, /^ {2}init \(1\)$/m);
 });
 
 const PLAIN = `# Project\n\n## Rules\n\n${RULE_LINE}\n\nProject text.\n`;
@@ -202,7 +202,7 @@ test('first run without the fragments: both appended under one heading, the rest
     read(root, 'CLAUDE.md'),
     `${PLAIN}\n## honest-docs\n\n${fragment('read-line')}\n\n${fragment('docs-policy')}\n`
   );
-  assert.doesNotMatch(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}init \(/m);
+  assert.doesNotMatch(runScript('docs-check', [], { cwd: root }).stderr, /^ {2}init \(/m);
 
   // Second run: everything is found where it was appended.
   assert.equal(init(root).stdout, `no changes\n${NO_GUARD}\n`);
@@ -243,7 +243,7 @@ test('Rules section without the rule: the line goes at its end, and a second run
   assert.equal(run.status, 0, run.stderr);
   assert.ok(run.stdout.includes(`${LISTED}\n`), run.stdout);
   assert.equal(read(root, 'CLAUDE.md'), text.replace('- [x](.claude/rules/x.md)\n', `- [x](.claude/rules/x.md)\n${RULE_LINE}\n`));
-  assert.doesNotMatch(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}index \(/m);
+  assert.doesNotMatch(runScript('docs-check', [], { cwd: root }).stderr, /^ {2}index \(/m);
 
   const second = init(root);
   assert.equal(second.stdout, `no changes\n${NO_GUARD}\n`);
@@ -263,7 +263,7 @@ test('no Rules section, first run: created right after the appended ## honest-do
   assert.equal(run.status, 0, run.stderr);
   assert.ok(run.stdout.endsWith(`${APPENDED('read-line and docs-policy')}\n${LISTED}\n`), run.stdout);
   assert.equal(read(root, 'CLAUDE.md'), `# Project\n\nText.\n\n## honest-docs\n\n${fragments()}\n\n## Rules\n\n${RULE_LINE}\n`);
-  assert.doesNotMatch(runBin('honest-docs-check', [], { cwd: root }).stderr, /^ {2}(index|init) \(/m);
+  assert.doesNotMatch(runScript('docs-check', [], { cwd: root }).stderr, /^ {2}(index|init) \(/m);
   assert.equal(init(root).stdout, `no changes\n${NO_GUARD}\n`);
 });
 

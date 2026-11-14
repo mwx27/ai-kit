@@ -1,7 +1,8 @@
-// Run from the repo root: node --test plugins/honest-docs/test/*.test.mjs
+// Run from plugins/honest-docs/: node --test
 //
 // Shared by the *.test.mjs files: a throwaway git repo in os.tmpdir() per test, and runners for the
-// plugin's hooks and bin/ commands the way Claude Code and the agent's Bash call them.
+// hooks and scripts of a copy in it (.claude/honest-docs/), the way Claude Code and the agent's Bash
+// call them.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -9,6 +10,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../core/config.mjs';
 import { fragmentVersions, renderDocsRule } from '../core/init.mjs';
+import { copySources, fileHash } from '../core/install.mjs';
+import { copyHooks } from '../core/settings-merge.mjs';
 
 export const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PLUGIN_VERSION = JSON.parse(
@@ -75,9 +78,25 @@ export function tmpRepo(t, files = {}) {
   return { dir, root };
 }
 
-/** One hook as Claude Code runs it: the payload as JSON on stdin, CLAUDE_PROJECT_DIR in env. */
+export const COPY = '.claude/honest-docs';
+
+/**
+ * The copy /honest-docs:init puts in `root` (core/install.mjs: the same files and a manifest), unless
+ * one is there; returns its folder. Not committed, and nothing else init writes.
+ */
+export function writeCopy(root) {
+  const copy = path.join(root, COPY);
+  if (existsSync(path.join(copy, 'manifest.json'))) return copy;
+  const files = copySources();
+  writeFiles(copy, Object.fromEntries(files));
+  const manifest = { version: PLUGIN_VERSION, files: Object.fromEntries([...files].map(([file, text]) => [file, fileHash(text)])), hooks: copyHooks() };
+  writeFiles(copy, { 'manifest.json': `${JSON.stringify(manifest, null, 2)}\n` });
+  return copy;
+}
+
+/** One hook of the copy in `root` as settings.json runs it: the payload as JSON on stdin, CLAUDE_PROJECT_DIR in env. */
 export function runHook(hook, payload, { root, env = {} }) {
-  const run = spawnSync('node', [path.join(PLUGIN_ROOT, 'hooks', `${hook}.mjs`)], {
+  const run = spawnSync('node', [path.join(writeCopy(root), 'hooks', `${hook}.mjs`)], {
     cwd: root,
     input: payload === undefined ? '' : JSON.stringify(payload),
     encoding: 'utf8',
@@ -86,9 +105,21 @@ export function runHook(hook, payload, { root, env = {} }) {
   return { status: run.status, stdout: run.stdout, stderr: run.stderr };
 }
 
-/** One bin/ command as the agent runs it in Bash: from inside the project, no CLAUDE_* in env. */
-export function runBin(command, args, { cwd, env = {} }) {
-  const run = spawnSync('bash', [path.join(PLUGIN_ROOT, 'bin', command), ...args], {
+/** The repo `cwd` is in, or `cwd` outside one. */
+function repoOf(cwd) {
+  try {
+    return path.resolve(git(cwd, 'rev-parse', '--show-toplevel').trim());
+  } catch {
+    return cwd;
+  }
+}
+
+/**
+ * One of the copy's scripts (`docs-check`, `docs-grep`) as the agent runs it in Bash:
+ * `node .claude/honest-docs/scripts/<script>.mjs`, from inside the project, no CLAUDE_* in env.
+ */
+export function runScript(script, args, { cwd, env = {} }) {
+  const run = spawnSync(process.execPath, [path.join(writeCopy(repoOf(cwd)), 'scripts', `${script}.mjs`), ...args], {
     cwd,
     encoding: 'utf8',
     env: cleanEnv(env),

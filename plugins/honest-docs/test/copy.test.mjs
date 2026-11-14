@@ -1,14 +1,15 @@
-// The code run from a copy in the project (.claude/honest-docs/, core/version.mjs) rather than from
-// the plugin: its version comes from manifest.json, docs-check works from it, and its hooks act only
-// on a repository that holds the copy (core/root.mjs).
+// The code run from a copy in the project (.claude/honest-docs/, core/version.mjs): its version
+// comes from manifest.json, docs-check works from it, and its hooks act only on a repository that
+// holds the copy (core/root.mjs). Run from the plugin, the same hooks do nothing.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { copySources } from '../core/install.mjs';
 import { hookRoot } from '../core/root.mjs';
 import { installedVersion } from '../core/version.mjs';
-import { PLUGIN_ROOT, PLUGIN_VERSION, agentSession, attributedLines, cleanEnv, eventLog, git, runBin, runHook, tmpRepo, writeFiles } from './helpers.mjs';
+import { PLUGIN_ROOT, PLUGIN_VERSION, agentSession, attributedLines, cleanEnv, eventLog, git, runInstall, tmpRepo, writeFiles } from './helpers.mjs';
 
 const COPY = '.claude/honest-docs';
 const HOOKS = ['session-start', 'pre-tool', 'post-tool', 'instructions-log', 'stop-gate'];
@@ -19,7 +20,7 @@ const HOOKS = ['session-start', 'pre-tool', 'post-tool', 'instructions-log', 'st
  */
 function initialised(t, { version } = {}) {
   const project = tmpRepo(t, { 'CLAUDE.md': '# Project\n' });
-  const init = runBin('honest-docs-init', [], { cwd: project.root });
+  const init = runInstall(project.root, 'init');
   assert.equal(init.status, 0, init.stderr);
   const copy = path.join(project.root, COPY);
   const manifest = path.join(copy, 'manifest.json');
@@ -161,16 +162,25 @@ test('a copy hook whose cwd is in a sibling repo without the copy exits 0 and wr
   assert.deepEqual([untracked(root), untracked(sibling.root)], before);
 });
 
-test('the plugin hook in the same situation acts on CLAUDE_PROJECT_DIR, as 0.1.8 did', (t) => {
-  const { root } = tmpRepo(t, { 'CLAUDE.md': '# Project\n' });
-  const sibling = tmpRepo(t, { 'CLAUDE.md': '# Sibling\n' });
-  writeFiles(sibling.root, { 'src/a.ts': '1\n' });
-  const before = untracked(sibling.root);
+test('a hook run from the plugin, not a copy, exits 0 and writes nothing, even in a repo with a copy', (t) => {
+  const { root } = initialised(t);
+  writeFiles(root, { '.claude/honest-docs.json': JSON.stringify({ instructionsLog: true }), 'src/a.ts': '1\n' });
+  const before = untracked(root);
 
-  const run = runHook('stop-gate', payload('stop-gate', sibling.root), { root });
-  assert.equal(run.status, 0, run.stderr);
-  assert.ok(existsSync(path.join(root, 'artifacts/logs/guard-gate-s.log')));
-  assert.equal(untracked(sibling.root), before);
+  for (const hook of HOOKS) {
+    const run = runCopyHook(PLUGIN_ROOT, hook, payload(hook, root), { projectDir: root });
+    assert.deepEqual([hook, run.status, run.stdout, run.stderr], [hook, 0, '', '']);
+  }
+  assert.equal(untracked(root), before);
+});
+
+test('the copy leaves out the plugin notifier', (t) => {
+  const { copy } = initialised(t);
+  for (const file of ['core/notify.mjs', 'hooks/notify.mjs']) {
+    assert.equal(copySources().has(file), false, file);
+    assert.equal(existsSync(path.join(copy, file)), false, file);
+  }
+  assert.ok(existsSync(path.join(copy, 'hooks/stop-gate.mjs')));
 });
 
 test('copy hooks in a worktree attribute paths relative to the worktree root', (t) => {

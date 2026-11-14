@@ -5,7 +5,7 @@
 // context in every session and is forgotten in the one where it matters. Nothing is reimplemented
 // here: it runs scripts/docs-check.mjs, then the project's guard as configured in `guard.command`
 // (core/config.mjs), with HONEST_DOCS_SCRIPTS pointing at the scripts/ beside the running code: the
-// plugin's, or the project's copy (core/version.mjs).
+// project's copy (core/version.mjs).
 //
 // What it runs on: the paths this session's tool calls changed (core/attribution.mjs), deleted ones
 // included, minus what already passed in this exact content (core/session-state.mjs). Nothing
@@ -41,8 +41,8 @@
 // edit one of them again and its hash no longer matches, so the gate picks it back up. It adds
 // nothing to the start set.
 //
-// From a copy in a worktree whose own copy is another version, the running code is the main
-// checkout's (CLAUDE_PROJECT_DIR stays there), so the turn is skipped and the user told.
+// In a worktree whose own copy is another version, the running code is the main checkout's
+// (CLAUDE_PROJECT_DIR stays there), so the turn is skipped and the user told.
 //
 // Every invocation appends one line to <logDir>/guard-gate-<session>.log:
 //   <ISO>  ran|skipped  changed=<n> checked=<n>  ms=<n>  pass|fail|giveup|unchecked|error|-  [reason]
@@ -64,12 +64,12 @@ import { PLUGIN_ROOT, logEvent, pluginVersion } from './log.mjs';
 import { causedBy, countByKey, docsCheckCommand, newOccurrences, runDocsCheck } from './problems.mjs';
 import { hookRoot } from './root.mjs';
 import { readStartSet, sessionDir, sessionKey, sessionStore, writeStartSet } from './session-state.mjs';
-import { installedVersion, isCopy } from './version.mjs';
+import { installedVersion } from './version.mjs';
 
 /** Identical failures tolerated before the gate concedes and lets the stop through. */
 const MAX_REPEATS = 3;
 // docs-check and the guard run one after the other, so the two together must fit the Stop hook's
-// timeout (180 s in hooks/hooks.json), or Claude Code kills the gate before it can answer.
+// timeout (180 s in core/settings-merge.mjs), or Claude Code kills the gate before it can answer.
 const DOCS_CHECK_TIMEOUT_MS = 20_000;
 const GUARD_TIMEOUT_MS = 150_000;
 const DETAIL_LINES = 12;
@@ -164,26 +164,24 @@ export function gate(input) {
       return { exitCode: 0 };
     }
 
-    // From a copy, the hooks are the main checkout's (CLAUDE_PROJECT_DIR); a worktree on another
-    // version would be checked by code that is not its own.
-    if (isCopy(PLUGIN_ROOT)) {
-      let theirs = null;
-      try {
-        theirs = installedVersion(path.join(root, COPY_DIR));
-      } catch {
-        // Unreadable: not the running version either.
-      }
-      if (theirs !== pluginVersion()) {
-        audit('skipped', 0, 0, '-', 'version-mismatch');
-        return {
-          stdout: JSON.stringify({
-            systemMessage:
-              `honest-docs: this tree holds honest-docs ${theirs ?? '(version unreadable)'}, the hooks running are ` +
-              `${pluginVersion()}. The Stop gate checked nothing this turn.`,
-          }),
-          exitCode: 0,
-        };
-      }
+    // The hooks are the main checkout's (CLAUDE_PROJECT_DIR); a worktree on another version would be
+    // checked by code that is not its own.
+    let theirs = null;
+    try {
+      theirs = installedVersion(path.join(root, COPY_DIR));
+    } catch {
+      // Unreadable: not the running version either.
+    }
+    if (theirs !== pluginVersion()) {
+      audit('skipped', 0, 0, '-', 'version-mismatch');
+      return {
+        stdout: JSON.stringify({
+          systemMessage:
+            `honest-docs: this tree holds honest-docs ${theirs ?? '(version unreadable)'}, the hooks running are ` +
+            `${pluginVersion()}. The Stop gate checked nothing this turn.`,
+        }),
+        exitCode: 0,
+      };
     }
 
     const dir = sessionDir(root, config, session);
