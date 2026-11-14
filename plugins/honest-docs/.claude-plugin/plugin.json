@@ -1,6 +1,6 @@
 {
   "name": "honest-docs",
-  "version": "0.1.8",
+  "version": "0.2.0",
   "description": "Your agent reads the docs. Make sure they're not lying.",
   "author": {
     "name": "Maciej Wojda"

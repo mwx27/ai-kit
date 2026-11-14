@@ -6,6 +6,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.2.0] — 2026-11-14
+
+A project on 0.1.x moves by running `/honest-docs:init`, not `update`: there is no copy to update yet. Then commit what it wrote.
+
+### Changed
+
+- **The checks live in the project.** `/honest-docs:init` copies them into `.claude/honest-docs/` and adds their hooks to `.claude/settings.json`; both get committed. They then run for everyone who opens the project, at the version in the repo, with or without the plugin. The plugin keeps the `/honest-docs:` commands and a notice at session start.
+- **The end-of-turn check blocks only on what the session itself broke.** It used to block on every docs problem in the repo and every changed file in the tree, so a turn could be sent back over problems that were there before, over edits you made in your editor, or over another session's work. Now it blocks only on a docs problem that is new since the session started and that comes from a file the session changed. New problems from elsewhere are named to you, not the agent. A session that only reads is never checked.
+
+### Added
+
+- **`/honest-docs:update`** brings the project's copy to the plugin's version, shows what changed in between, and leaves your config alone.
+- **A notice at session start** when the project's copy is missing, older or newer than the plugin, naming what to run.
+- **The agent learns at session start how many docs problems the repo has**, and that they do not block.
+- **`docs-check.mjs --json`** prints the problems for a program to read, each with the files whose change can cause it.
+
+### Removed
+
+- **The `honest-docs-check`, `honest-docs-grep` and `honest-docs-init` commands.** Run `node .claude/honest-docs/scripts/docs-check.mjs`, `node .claude/honest-docs/scripts/docs-grep.mjs` and `/honest-docs:init` instead.
+
+### Fixed
+
+- **`covers:` is read from docs with Windows line endings.** Before, such a doc reported its `covers:` as unreadable, and the doc reminder never named it.
+- **A turn that only deletes files is checked.** Deleting a file a doc names now blocks like any other change that breaks the doc.
+
+---
+
 ## [0.1.8] — 2026-11-04
 
 ### Added
