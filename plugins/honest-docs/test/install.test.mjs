@@ -345,7 +345,8 @@ test('update to a new version prints updated X → Y and only the CHANGELOG sect
 });
 
 test('the 0.2.0 docs-policy fragment replaces 0.1.0 and names the copy docs-grep', (t) => {
-  const { root, dir } = legacyProject(t);
+  const claudeMd = docsBaseline()['CLAUDE.md'].replace(fragment('docs-policy'), fragment('docs-policy', '0.1.0'));
+  const { root, dir } = legacyProject(t, { 'CLAUDE.md': claudeMd });
   const run = runInstall(root, 'init', { pluginRoot: fakePlugin(dir, '0.2.0') });
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stdout, /^honest-docs-init: docs-policy: 0\.1\.0 → 0\.2\.0$/m);

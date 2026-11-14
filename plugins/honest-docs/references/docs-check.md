@@ -1,21 +1,22 @@
 # Docs check
 
-`honest-docs-check` (`<plugin_root>/scripts/docs-check.mjs`) answers one question about every
+`node .claude/honest-docs/scripts/docs-check.mjs`, run from the project root, answers one question about every
 Markdown file the config's `scan` names that git tracks or would track — by default the docs folder
 (`docsDir`, `_docs/`), `.claude/rules/`, `.claude/skills/`, `CLAUDE.md` and `README.md`: **does
 everything this text points at still exist?** Six checks ask that, a seventh, `updated`, that every
 doc carries the date line the Stop gate rewrites, and an eighth, `init`, that what
 `/honest-docs:init` wrote is current — file reads, regexes and three git calls, no dependencies, well
-under a second. The Stop gate runs it itself on every stop with changes to check, before the
-project's guard, and a failure blocks as check `docs` ([`hooks.md`](hooks.md#stop-gatemjs--stop)).
+under a second. Run from a terminal, it reports every problem and exits 1 on any. The Stop gate
+runs it with `--json` on every stop with changes to check, before the project's guard, and blocks
+only on a problem that is new and that the session caused ([`hooks.md`](hooks.md#what-blocks)).
 
 The rule files are in scope for the same reason the docs are: they carry links and paths, they are
 read as instructions, and a rule pointing at a file that moved is worse than a doc doing it — the
 reader acts on it.
 
 A file git ignores is skipped by every check, the `index` and `covers` ones included, and by
-`honest-docs-grep`: an ignored doc is one person's notes, not the project's docs, and must never
-block anyone's turn. One list in `<plugin_root>/core/doc-set.mjs` serves them all. Without git — not
+`docs-grep.mjs`: an ignored doc is one person's notes, not the project's docs, and must never
+block anyone's turn. One list in `.claude/honest-docs/core/doc-set.mjs` serves them all. Without git — not
 a repo, no binary, a failing call — the folders are walked on disk as before, ignored files
 included, and one line says they could not be told apart.
 
@@ -38,24 +39,24 @@ as pointers, and a rule linked only there is still missing from the index.
 only after `Write` has created it _(observed, October 2026)_. Without the check a new doc could
 stay undated for good.
 
-`init` exists because the plugin is updated outside the project, and what it wrote into the project
-is not. It compares text, never version numbers: the rule's last line, the stamp naming the plugin
-version that wrote it, is left out of the comparison, so an update that changes neither the rule nor
-a fragment reports nothing. Whitespace is ignored in the rule as in the fragments, so the project's
+`init` exists because the rule and the fragments are files the project edits, apart from the copy
+that writes them. It compares text, never version numbers: the rule's last line, the stamp naming
+the version that wrote it, is left out of the comparison, so an update that changes neither the
+rule nor a fragment reports nothing. Whitespace is ignored in the rule as in the fragments, so the project's
 formatter may rewrap it. A fragment's current version is the newest file in
-`<plugin_root>/templates/fragments/<name>/` not above the plugin's version, and it counts as present
+`.claude/honest-docs/templates/fragments/<name>/` not above the copy's version, and it counts as present
 when its words appear in order with any whitespace between them, so a rewrap passes and a changed
 word does not. Every problem it reports names the rule or the fragment that differs, and all but a
 fragment present twice say to run `/honest-docs:init`.
 
 `covers` asks git for tracked plus untracked-but-not-ignored files, so a doc written with a feature
 not yet added passes, and drops what is gone from disk, so a doc outliving its deleted code fails
-before the deletion is staged. A `covers:` key the parser reads no glob from — CRLF line endings,
-`covers: []`, a one-line value — is an error too: the parser reads only a block list, and a key it
+before the deletion is staged. A `covers:` key the parser reads no glob from — `covers: []`, a
+one-line value — is an error too: the parser reads only a block list, and a key it
 cannot read would otherwise pass as a doc that covers nothing. That part is a plain file read;
 without git only the matching is skipped, with one line of output. The globs are root-anchored, read
-by the same `<plugin_root>/core/doc-covers.mjs` as the doc reminder
-([`hooks.md`](hooks.md#doc-remindermjs--posttooluse-on-editwritebash)).
+by the same `.claude/honest-docs/core/doc-covers.mjs` as the doc reminder
+([`hooks.md`](hooks.md#the-doc-reminder)).
 
 A path git ignores gets no verdict from `links`, `anchors` or `paths`, whether or not it is on disk,
 as an `absentByDesign` entry gets none: whether it exists depends on the machine. The plugin writes
@@ -84,6 +85,34 @@ A project without `package.json` gets every script its docs run reported under `
 `no package.json`, and nothing when they name none. Without the index file, `index` reports that
 file as not found and nothing else, `init` reports its fragments missing, and the other checks run
 as usual. A symlink to nothing in a scanned folder is reported under `links`.
+
+## The `--json` output
+
+`--json` prints `{ files, problems }` on stdout and exits 0 whatever it found (2 on a broken
+config). Each problem carries `check`, `file` (the doc), `line` (0 for the whole file), `message`,
+`target` and `related`. `related` names the other repo paths whose change can cause the problem; the
+Stop gate takes a new problem as the session's when its doc or one of these paths is among the
+session's changes ([`hooks.md`](hooks.md#what-blocks)). `target` is internal: it decides only
+whether git ignores what the problem is about.
+
+| Check     | Problem                          | `related`                                      |
+| --------- | -------------------------------- | ---------------------------------------------- |
+| `links`   | no such file                     | the link's target                              |
+| `links`   | symlink to nothing               | what it pointed at, when that is in the repo   |
+| `anchors` | no such heading                  | the page that should hold it                   |
+| `anchors` | line anchor                      | none                                           |
+| `paths`   | no such path                     | the path                                       |
+| `paths`   | line number                      | none                                           |
+| `scripts` | no such script                   | `package.json`                                 |
+| `index`   | page or rule missing, or gone    | that page or rule                              |
+| `index`   | index file not found             | none                                           |
+| `covers`  | no glob read, or no file matched | none                                           |
+| `updated` | no single date line              | none                                           |
+| `init`    | the rule missing or different    | `.claude/honest-docs.json`                     |
+| `init`    | a fragment missing or repeated   | none                                           |
+
+"None" means only an edit to the doc itself causes it. A `covers` glob matching no file is also
+the session's when it deleted a file the glob matches.
 
 ## The two lists in the config
 
