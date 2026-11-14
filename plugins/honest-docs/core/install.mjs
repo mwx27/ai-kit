@@ -3,8 +3,9 @@
 //
 //   .claude/honest-docs/    the copy the hooks and scripts run from: core/ and hooks/*.mjs but the
 //                           plugin's notifier, scripts/docs-check.mjs and docs-grep.mjs, templates/
-//                           (checkInit renders templates/docs.md), and manifest.json — the version, the sha256 of each
-//                           file after \r\n → \n, and the hooks merged into settings.json
+//                           (checkInit renders templates/docs.md), and manifest.json — the version,
+//                           the sha256 of each file after \r\n → \n, and the hooks merged into
+//                           settings.json
 //   .claude/settings.json   the copy's hooks, merged (core/settings-merge.mjs)
 //   .prettierignore         `.claude/honest-docs/` appended when the file exists and nothing covers it
 //   the rest                what core/init.mjs plans: the rule, the CLAUDE.md fragments, the Rules

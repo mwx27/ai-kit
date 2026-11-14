@@ -24,7 +24,9 @@ Claude Code's plugin cache, so nothing is reached by a path relative to the skil
   `${CLAUDE_PLUGIN_ROOT}/references/…` in `SKILL.md`, still linked directly from it;
   `<plugin_root>/…` in `references/*.md`, with `SKILL.md` saying what `<plugin_root>` means.
 - **Commands:** what a skill tells the agent to run in Bash is a name from the plugin's
-  `bin/`, which Claude Code documents on the Bash tool's PATH while the plugin is enabled.
+  `bin/`, which Claude Code documents on the Bash tool's PATH while the plugin is enabled, or
+  `node "${CLAUDE_PLUGIN_ROOT}/scripts/…"`; code a plugin installs into the project (honest-docs)
+  runs by its path there, `node .claude/honest-docs/scripts/…`.
   Hooks call `${CLAUDE_PLUGIN_ROOT}/…`: the docs say nothing about `bin/` on a hook's PATH.
 
 Claude Code documents `${CLAUDE_SKILL_DIR}` substitution only for `SKILL.md`, and
@@ -59,7 +61,8 @@ SemVer, `0.x` until an interface settles. Each plugin owns one `CHANGELOG.md`
 ([Keep a Changelog](https://keepachangelog.com/)), shared by its skills. A version bump
 changes `version` in `.claude-plugin/plugin.json` and adds a `CHANGELOG.md` entry. Only a
 skill that states its own version (cv-bullets) also carries a `Current version:` footer in
-its `SKILL.md`, bumped with them; code that needs the version reads `plugin.json`.
+its `SKILL.md`, bumped with them; code that needs the version reads `plugin.json`, or, in a copy installed
+into a project, that copy's `manifest.json`.
 
 ## No personal data in skills
 

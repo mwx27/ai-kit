@@ -1,6 +1,6 @@
 # Instruction log
 
-`<plugin_root>/hooks/instructions-log.mjs` — InstructionsLoaded + UserPromptExpansion + PostToolUse
+`.claude/honest-docs/hooks/instructions-log.mjs` — InstructionsLoaded + UserPromptExpansion + PostToolUse
 on Edit|Write|Skill|Read.
 
 Off by default. With `instructionsLog: true` in `.claude/honest-docs.json` it appends one line per
@@ -73,7 +73,7 @@ later, so the log shows no line for it _(observed, September 2026)_.
 **Known limitation: the log sees Edit and Write, not Bash.** A session doing its work through
 `printf >>` or `sed -i` looks exactly like a session that wrote nothing. Those sessions are out of
 the sample and have to be counted separately — never quietly dropped, which is the same reason the
-Stop gate takes its file list from git rather than from a record of tool calls.
+Stop gate attributes Bash calls by their effect on the tree ([`hooks.md`](hooks.md#attribution)).
 
 **It records writes from its own `PostToolUse` entry, into its own log.** It needs the _sequence_ of
 individual writes, which git cannot answer at all; a record keeping one timestamp per path,
@@ -81,5 +81,5 @@ overwritten on every rewrite, loses the one moment being measured — the first 
 shared event log ([`hooks.md`](hooks.md#event-log)): the measurement has its own.
 
 The hook prints nothing, so the log file is its only output. Anything the hook throws is
-swallowed (`<plugin_root>/hooks/io.mjs`): a diagnostic that breaks the session it measures is worse
+swallowed (`.claude/honest-docs/hooks/io.mjs`): a diagnostic that breaks the session it measures is worse
 than no diagnostic.

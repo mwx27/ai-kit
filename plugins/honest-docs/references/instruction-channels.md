@@ -28,8 +28,8 @@ The channels differ in _when_ they enter context, and every trap below follows f
   its own ([`instructions-log.md`](instructions-log.md)).
 - **Skills** — a skill the model may invoke loads when its `description` in the frontmatter matches
   the task, and one with `disable-model-invocation` loads only when the user types its `/name`
-  _(documented)_; both of this plugin's skills, `/honest-docs:docs-audit` and `/honest-docs:init`,
-  are such. A description that drifts from the body raises no error: the skill simply does not fire.
+  _(documented)_; all three of this plugin's skills, `/honest-docs:docs-audit`, `/honest-docs:init`
+  and `/honest-docs:update`, are such. A description that drifts from the body raises no error: the skill simply does not fire.
   With the instruction log on, a Skill call and a typed `/name` each leave a `skill:` line, and so
   does a `Read` of a file under the project's own `.claude/skills/`, so a project skill that was
   never invoked shows as an absence there and nowhere else.
@@ -58,13 +58,13 @@ four mechanisms:
   (the docs rule `/honest-docs:init` writes, from `<plugin_root>/templates/docs.md`: write what the
   code cannot carry).
 - **Mechanical checks over prose.** A check needs no one to remember it: the Stop gate blocks a turn
-  whose changes fail the project's guard, and a guard that runs `honest-docs-check` fails while a
-  link, path or script a doc names does not resolve ([`docs-check.md`](docs-check.md)).
+  whose changes leave a link, path or script a doc names unresolved
+  ([`docs-check.md`](docs-check.md)), or fail the project's guard.
 - **An instruction that arrives.** A rule that never loads is indistinguishable from one that does
   not exist, and nobody sees the moment it stops matching the code ([above](#when-each-kind-loads)).
 - **A code change that points at its doc.** `covers:` ties a doc to the code it describes, and a
   hook names the doc when that code changes ([`hooks.md`](hooks.md)). The reverse runs by hand:
-  `honest-docs-grep` lists every line of the docs and rules that names a given symbol, and the docs
+  `node .claude/honest-docs/scripts/docs-grep.mjs` lists every line of the docs and rules that names a given symbol, and the docs
   policy `/honest-docs:init` puts in `CLAUDE.md` has the agent run it after a behavior change.
 
 **Delivery is not truth.** A rule can arrive in every session and be false; none of the four
@@ -75,17 +75,18 @@ someone looks — the judgement is still a reader's: a person's, or an agent's r
 ## Decisions
 
 **The Stop gate blocks rather than reports** — exit 2 from the Stop hook, which keeps Claude from
-stopping _(documented)_ ([`hooks.md`](hooks.md#stop-gatemjs--stop)). The cost is asymmetric: a gate that fires when it
+stopping _(documented)_ ([`hooks.md`](hooks.md#the-stop-gate)). The cost is asymmetric: a gate that fires when it
 needn't costs seconds of one turn, a gate that is missing costs a green commit with a broken tree
 behind it. The escape hatch, for when the gate itself is what's wrong, is the give-up after three
 identical failures; removing `guard.command` from `.claude/honest-docs.json` takes the project's
-guard out but leaves docs-check. Only disabling the plugin turns the gate off, and every other hook
-with it.
+guard out but leaves docs-check. The hooks are in the project's `.claude/settings.json`, so
+disabling the plugin does not turn the gate off; removing them from there does.
 
-**The gate reads the changed-file list from git, not from a record of the agent's own writes.** The
-agent also changes files through Bash (`printf >>`, `sed -i`, `patch`), which a `PostToolUse` hook
-on Edit|Write never sees — so a tool-call record's picture of the turn is partial, and a gate fed
-from it waves through exactly the turns that did their work that way.
+**The gate checks what the session's tool calls changed, Bash included.** The agent also changes
+files through Bash (`printf >>`, `sed -i`, `patch`), which a `PostToolUse` hook on Edit|Write never
+sees, so Bash calls are attributed by comparing the tree before and after
+([`hooks.md`](hooks.md#attribution)). Taking every change in the tree instead blocked a session on
+the user's editor edits and on other sessions' work.
 
 **What a new file needs at its first write does not belong in a path-scoped rule.** The rule
 arrives after that write ([above](#when-each-kind-loads)), so where a file goes, what it is called

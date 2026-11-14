@@ -176,10 +176,12 @@ test('index: the index lists a page that is gone', (t) => {
   const { root } = cleanProject(t);
   edit(root, 'CLAUDE.md', (text) => text.replace('- [Beta]', '- [Gamma](_docs/tools/gamma.md)\n- [Beta]'));
   const run = check(root);
+  // The line moves with the docs-policy fragment above it.
+  const line = readFileSync(path.join(root, 'CLAUDE.md'), 'utf8').split('\n').indexOf('- [Gamma](_docs/tools/gamma.md)') + 1;
   // The same line is a broken link too, so this one case reports two categories.
   assert.equal(run.status, 1);
   assert.ok(run.stderr.includes('\n    CLAUDE.md  docs index lists a page that is gone: _docs/tools/gamma.md\n'));
-  assert.ok(run.stderr.includes('\n    CLAUDE.md:14  no such file: _docs/tools/gamma.md\n'));
+  assert.ok(run.stderr.includes(`\n    CLAUDE.md:${line}  no such file: _docs/tools/gamma.md\n`));
   assert.match(run.stderr, /^docs-check: 2 problem\(s\) in 4 files$/m);
 });
 

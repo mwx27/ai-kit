@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Checks the project's docs against the tree: links, anchors, backticked paths, `<runner> run` names, the
-// docs index, `covers:` globs, the Last Updated line and what /honest-docs:init wrote. Run as
-// `node .claude/honest-docs/scripts/docs-check.mjs` from the project's copy, or by the project's
-// guard through $HONEST_DOCS_SCRIPTS. What it scans
-// and what it accepts as absent comes from .claude/honest-docs.json (core/config.mjs).
+// Checks the project's docs against the tree: links, anchors, backticked paths, `<runner> run`
+// names, the docs index, `covers:` globs, the Last Updated line and what /honest-docs:init wrote.
+// Run as `node .claude/honest-docs/scripts/docs-check.mjs` from the project's copy, or by the
+// project's guard through $HONEST_DOCS_SCRIPTS. What it scans and what it accepts as absent comes
+// from .claude/honest-docs.json (core/config.mjs).
 //
 // `--json` prints `{ files, problems: [{ check, file, line, message, target, related }] }` on stdout
 // instead, for a program to read, and exits 0 whatever it found; a broken config still exits 2.

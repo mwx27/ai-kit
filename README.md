@@ -18,20 +18,18 @@ Add the marketplace once, then install plugins from it:
 
 Your agent reads the docs. Make sure they're not lying. A plugin that keeps a project's docs and agent rules in step with its code:
 
-- At the end of every turn that changed something, it checks the docs, then runs your project's own check script on the changed files. If either fails, the agent has to fix it before handing back. It gives up after three identical failures rather than looping.
+- At the end of every turn in which the agent changed something, it checks the docs, then runs your project's own check script on the changed files. If the agent's changes broke a doc or fail the script, the agent has to fix them before handing back. Problems that were there before the session, or that came from someone else's edits, do not block; it tells you about new ones. It gives up after three identical failures rather than looping.
 - It keeps each doc's `**Last Updated:**` date current, from when the file actually changed.
 - When code that a doc says it describes changes, it tells the agent to re-read that doc.
-- `honest-docs-check` catches docs that point at files, headings, paths or scripts that no longer exist; `honest-docs-grep <symbol>` lists every line of the docs and rules that names a symbol; `/honest-docs:docs-audit` goes further and checks what the docs claim against the code.
+- `node .claude/honest-docs/scripts/docs-check.mjs` catches docs that point at files, headings, paths or scripts that no longer exist; `node .claude/honest-docs/scripts/docs-grep.mjs <symbol>` lists every line of the docs and rules that names a symbol; `/honest-docs:docs-audit` goes further and checks what the docs claim against the code.
 
 Whether a sentence is still true is something only a reader can judge: you, or the audit.
 
-It needs `node` and `git` on the PATH.
+The checks are installed into the project and committed with it, so they run for everyone who works on it, at the version in the repo. It needs `node` and `git` on the PATH.
 
 ### Setup
 
-It is meant to run only in projects that opt in.
-
-1. Install it:
+1. Install the plugin:
 
    ```
    /plugin install honest-docs@mwx27-ai-kit
@@ -45,13 +43,15 @@ It is meant to run only in projects that opt in.
 
    If your install turned it on for every project, set the same entry to `false` in `~/.claude/settings.json`; the project's setting wins.
 
-3. Add `artifacts/` to `.gitignore`. The plugin keeps its working files in `artifacts/claude-hooks/` and `artifacts/logs/`; `stateDir` and `logDir` move them.
+3. Add `artifacts/` to `.gitignore`. The checks keep their working files in `artifacts/claude-hooks/` and `artifacts/logs/`; `stateDir` and `logDir` move them.
 
-4. Start a new session in the project and run `/honest-docs:init`. It writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md`, and adds a Last Updated line to each doc that has none. Run it again after every plugin update.
+4. Run `/honest-docs:init`. It copies the checks into `.claude/honest-docs/`, adds their hooks to `.claude/settings.json`, writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md`, adds a Last Updated line to each doc that has none, and lists every file it wrote. It ends by saying how many docs problems the check finds; they do not block, but are worth fixing.
 
-5. `init` ends by running `honest-docs-check` and saying how many problems it found. If there are any, have the agent fix them: the end-of-turn check covers all the docs, so until they are fixed, every turn that changes anything is sent back to fix docs it never touched.
+5. Commit what it wrote: `.claude/honest-docs/`, `.claude/settings.json` and the rest of its list.
 
-The docs rule is the plugin's and is rewritten on every `init`. Rules only your project needs go in a rule file of your own, which the plugin never touches; [`references/instruction-channels.md`](plugins/honest-docs/references/instruction-channels.md#decisions) says how.
+After a plugin update, the next session opens with a notice to run `/honest-docs:update`; run it and commit again. A teammate needs no setup beyond pulling: the checks run from the repo. The plugin adds the notice and the `/honest-docs:` commands.
+
+The docs rule is the plugin's and is rewritten on every `init` and `update`. Rules only your project needs go in a rule file of your own, which the plugin never touches; [`references/instruction-channels.md`](plugins/honest-docs/references/instruction-channels.md#decisions) says how.
 
 ### Connect your check script (optional)
 
@@ -61,11 +61,11 @@ To have the end-of-turn check also run your own checks, name the command in `.cl
 { "guard": { "command": ["bash", "scripts/guard.sh"] } }
 ```
 
-The plugin calls it with `--changed` and the changed files, after `honest-docs-check` passes; a non-zero exit means it failed. What the command must do, and every other setting, is in [`references/hooks.md`](plugins/honest-docs/references/hooks.md) and [`core/config.mjs`](plugins/honest-docs/core/config.mjs).
+The end-of-turn check calls it with `--changed` and the files the agent changed, after the docs check; a non-zero exit means it failed. What the command must do, and every other setting, is in [`references/hooks.md`](plugins/honest-docs/references/hooks.md) and [`core/config.mjs`](plugins/honest-docs/core/config.mjs).
 
 ### Limitations
 
-The end-of-turn check cannot tell your own mid-session edits from the agent's. Changes are in [`CHANGELOG.md`](plugins/honest-docs/CHANGELOG.md).
+The end-of-turn check tracks which files the agent changed, not which lines. If you edit by hand a file the agent has already changed in the session, or two agents work on the same files, it counts those edits as the agent's. The full list is in [`references/hooks.md`](plugins/honest-docs/references/hooks.md#limits). Changes are in [`CHANGELOG.md`](plugins/honest-docs/CHANGELOG.md).
 
 ## ask-repo
 
