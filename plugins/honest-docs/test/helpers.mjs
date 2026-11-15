@@ -64,10 +64,11 @@ export function writeFiles(root, files) {
 /**
  * A fresh temporary folder holding `repo/`, a git repo with `files` committed, removed when the test
  * ends. `dir` is the folder around it, for fixtures that must stay outside the repo (the guard).
- * Paths are real paths: on macOS os.tmpdir() is a symlink, and git reports the resolved one.
+ * Paths are real paths, as git reports them: on macOS os.tmpdir() is a symlink, and on Windows it
+ * can hold an 8.3 name (RUNNER~1).
  */
 export function tmpRepo(t, files = {}) {
-  const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'honest-docs-test-')));
+  const dir = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'honest-docs-test-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const root = path.join(dir, 'repo');
   mkdirSync(root);
