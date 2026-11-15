@@ -134,10 +134,13 @@ export function diffSnapshots(root, pre, post) {
     .map((file) => ({ path: file, deleted: post[file] === null || (valueOf(post, file) === AS_IN_HEAD && !existsSync(path.join(root, file))) }));
 }
 
-/** An absolute path's real form, through its nearest existing parent: macOS /var is /private/var. */
+/**
+ * An absolute path's real form, through its nearest existing parent: macOS /var is /private/var. The
+ * native call also expands a Windows 8.3 name (RUNNER~1), as git's --show-toplevel does.
+ */
 function realPath(abs) {
   try {
-    return realpathSync(abs);
+    return realpathSync.native(abs);
   } catch {
     const parent = path.dirname(abs);
     return parent === abs ? abs : path.join(realPath(parent), path.basename(abs));
