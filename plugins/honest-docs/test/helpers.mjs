@@ -73,7 +73,8 @@ export function tmpRepo(t, files = {}) {
   const root = path.join(dir, 'repo');
   mkdirSync(root);
   git(root, 'init', '-q', '-b', 'main');
-  writeFiles(root, { '.gitkeep': '', ...files });
+  // A .gitignore, as a real project has one: install warns without it (core/install.mjs).
+  writeFiles(root, { '.gitkeep': '', '.gitignore': 'node_modules/\n', ...files });
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'fixture');
   return { dir, root };

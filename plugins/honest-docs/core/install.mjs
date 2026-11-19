@@ -14,10 +14,13 @@
 //   the rest                what core/init.mjs plans: the rule, the CLAUDE.md fragments, the Rules
 //                           line, Last Updated lines; the config skeleton on init only
 //
-// Refusals write nothing: init where a manifest exists, update where none does or where it names a
+// Refusals write nothing: init outside a git repository (attribution and the changed files need
+// git), init where a manifest exists, update where none does or where it names a
 // newer version than the plugin's, a settings.json that is not a JSON object, a fragment error
 // (core/init.mjs), and — unless forced — a copied file changed by hand, which is shown as a diff.
-// Warnings, which stop nothing: files git tracks in stateDir or logDir; a stateDir or logDir outside
+// Warnings, which stop nothing: no .gitignore, or one that leaves node_modules/ in a project with a
+// package.json — the Bash hooks hash every untracked file and would time out; files git tracks in
+// stateDir or logDir; a stateDir or logDir outside
 // STATE_ROOT that git does not ignore; the state and logs of earlier versions, which nothing reads now.
 // Update at the plugin's own version is a repair: it copies and merges again.
 //
@@ -26,7 +29,7 @@
 // and a manifest only once everything else is in place.
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { CONFIG_FILE, COPY_DIR, STATE_ROOT, usesStateRoot } from './config.mjs';
 import { ignoredByGit } from './git-ignored.mjs';
@@ -155,6 +158,28 @@ function trackedUnder(root, dirs) {
   }
 }
 
+/** Whether `root` is the top of a git work tree. */
+function isGitRoot(root) {
+  try {
+    const top = execFileSync('git', ['-C', root, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return path.resolve(top) === path.resolve(root) || realpathSync.native(top) === realpathSync.native(root);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The Bash hooks hash every untracked file before and after each call (core/changed-files.mjs), so
+ * an unignored node_modules/ runs them past their timeout and the call goes unattributed.
+ */
+function gitignoreWarnings(root) {
+  if (!existsSync(path.join(root, '.gitignore')))
+    return ['this repo has no .gitignore; the hooks hash every untracked file around each Bash call, so dependencies or build output left unignored can make them time out'];
+  if (existsSync(path.join(root, 'package.json')) && ignoredByGit(root, ['node_modules/honest-docs-probe']).length === 0)
+    return ['.gitignore does not ignore node_modules/; the hooks hash every untracked file around each Bash call, so after an install they can time out'];
+  return [];
+}
+
 /** The warnings about where the hooks write: tracked files there, an unignored folder, earlier state. */
 function stateWarnings(root, config) {
   const warnings = [];
@@ -233,6 +258,10 @@ export function planInstall(root, config, { mode, force = false }) {
       }
     }
   }
+  if (mode === 'init' && !isGitRoot(root)) {
+    plan.refusal = 'not a git repository: run git init here, then /honest-docs:init again';
+    return plan;
+  }
   if (mode === 'init' && installed) {
     plan.refusal = `already installed (${manifest?.version ?? 'unreadable manifest'}): run /honest-docs:update`;
     return plan;
@@ -278,14 +307,14 @@ export function planInstall(root, config, { mode, force = false }) {
   }
 
   // The rule, the fragments, the Rules line, the Last Updated lines, the config skeleton.
-  const init = planInit(root, config);
+  const init = planInit(root, config, { mode });
   plan.errors.push(...init.errors);
   if (plan.errors.length > 0) return plan;
   plan.writes = init.writes.filter((w) => mode === 'init' || w.file !== CONFIG_FILE);
   plan.notes.push(...init.notes);
   plan.warnings.push(...init.warnings);
 
-  plan.warnings.push(...stateWarnings(root, config));
+  plan.warnings.push(...gitignoreWarnings(root), ...stateWarnings(root, config));
 
   // .prettierignore: Prettier reads neither the copy's settings nor STATE_ROOT's nested .gitignore.
   const keepOut = [COPY_DIR, ...(usesStateRoot(config) ? [STATE_ROOT] : [])];
