@@ -7,26 +7,33 @@
 //                           the sha256 of each file after \r\n → \n, and the hooks merged into
 //                           settings.json
 //   .claude/settings.json   the copy's hooks, merged (core/settings-merge.mjs)
-//   .prettierignore         `.claude/honest-docs/` appended when the file exists and nothing covers it
+//   .prettierignore         `.claude/honest-docs/`, and `.claude/honest-docs-state/` when the state
+//                           or logs are kept there, appended when the file exists and nothing covers them
+//   .claude/honest-docs-state/  created with its .gitignore (core/state-dir.mjs), so it is ignored
+//                           from the first run on
 //   the rest                what core/init.mjs plans: the rule, the CLAUDE.md fragments, the Rules
 //                           line, Last Updated lines; the config skeleton on init only
 //
 // Refusals write nothing: init where a manifest exists, update where none does or where it names a
 // newer version than the plugin's, a settings.json that is not a JSON object, a fragment error
 // (core/init.mjs), and — unless forced — a copied file changed by hand, which is shown as a diff.
+// Warnings, which stop nothing: files git tracks in stateDir or logDir; a stateDir or logDir outside
+// STATE_ROOT that git does not ignore; the state and logs of earlier versions, which nothing reads now.
 // Update at the plugin's own version is a repair: it copies and merges again.
 //
 // The project's files are written first and the copy last: it is staged beside the old one,
 // manifest.json last, and swapped in by two renames, so a crash leaves the old copy or the new one,
 // and a manifest only once everything else is in place.
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { CONFIG_FILE, COPY_DIR } from './config.mjs';
+import { CONFIG_FILE, COPY_DIR, STATE_ROOT, usesStateRoot } from './config.mjs';
 import { ignoredByGit } from './git-ignored.mjs';
 import { DOCS_RULE, compareSemver, planInit, semver } from './init.mjs';
 import { PLUGIN_ROOT, pluginVersion } from './log.mjs';
 import { SETTINGS_FILE, SettingsError, copyHooks, mergeHooks } from './settings-merge.mjs';
+import { makeDir } from './state-dir.mjs';
 import { MANIFEST } from './version.mjs';
 
 export const PRETTIER_IGNORE = '.prettierignore';
@@ -108,12 +115,65 @@ export function unifiedDiff(a, b, fromName, toName) {
   return `${out.join('\n')}\n`;
 }
 
-/** Whether a .prettierignore line keeps Prettier out of the copy. */
-function coversCopy(line) {
+/** Whether a .prettierignore line keeps Prettier out of `dir` (a folder under .claude/). */
+function covers(line, dir) {
   const pattern = line.trim();
   if (pattern === '' || pattern.startsWith('#') || pattern.startsWith('!')) return false;
   const bare = pattern.replace(/^\//, '').replace(/\/(\*\*?)?$/, '');
-  return bare === '.claude' || bare === COPY_DIR;
+  return bare === '.claude' || bare === dir;
+}
+
+/** Where 0.2.0 and earlier kept what 0.2.1 keeps in STATE_ROOT, for the config's stateDir and logDir. */
+function earlierState(root, config) {
+  const found = [];
+  const sessions = config.stateDir === STATE_ROOT ? 'artifacts/claude-hooks/honest-docs' : `${config.stateDir}/honest-docs`;
+  if (existsSync(path.join(root, sessions))) found.push(`${sessions}/`);
+  if (config.logDir === `${STATE_ROOT}/logs`) {
+    let names = [];
+    try {
+      names = readdirSync(path.join(root, 'artifacts/logs'));
+    } catch {
+      // No earlier logs.
+    }
+    if (names.includes('events.jsonl')) found.push('artifacts/logs/events.jsonl');
+    for (const prefix of ['guard-gate-', 'instructions-']) {
+      const count = names.filter((name) => name.startsWith(prefix) && name.endsWith('.log')).length;
+      if (count > 0) found.push(`artifacts/logs/${prefix}*.log (${count} file${count === 1 ? '' : 's'})`);
+    }
+  }
+  return found;
+}
+
+/** The files git tracks under `dirs` (repo-relative); empty without git. */
+function trackedUnder(root, dirs) {
+  try {
+    return execFileSync('git', ['-C', root, 'ls-files', '-z', '--', ...dirs], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      .split('\0')
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** The warnings about where the hooks write: tracked files there, an unignored folder, earlier state. */
+function stateWarnings(root, config) {
+  const warnings = [];
+  // logDir inside stateDir (the default) is named once, as part of stateDir.
+  const dirs = [config.stateDir, config.logDir].filter((dir, i, all) => !all.some((other, j) => j !== i && (dir === other ? j < i : dir.startsWith(`${other}/`))));
+  const tracked = trackedUnder(root, dirs);
+  if (tracked.length > 0)
+    warnings.push(
+      `git tracks ${tracked.length} file${tracked.length === 1 ? '' : 's'} under ${dirs.map((d) => `${d}/`).join(' and ')}, where the hooks keep session state and logs; remove ${tracked.length === 1 ? 'it' : 'them'} from the repo`
+    );
+  const outside = dirs.filter((dir) => dir !== STATE_ROOT && !dir.startsWith(`${STATE_ROOT}/`));
+  const ignored = new Set(ignoredByGit(root, outside.map((dir) => `${dir}/honest-docs-probe`)).map(({ file }) => file));
+  for (const dir of outside)
+    if (!ignored.has(`${dir}/honest-docs-probe`))
+      warnings.push(`git does not ignore ${dir}/, where the config keeps the hooks' state or logs; add it to .gitignore, or they will show up in git status`);
+  const earlier = earlierState(root, config);
+  if (earlier.length > 0)
+    warnings.push(`honest-docs no longer reads the state and logs of earlier versions; delete them when you no longer need them: ${earlier.join(', ')}`);
+  return warnings;
 }
 
 /** The `## [x.y.z]` sections of the plugin's CHANGELOG.md above `from` and up to `to`, newest first. */
@@ -225,13 +285,19 @@ export function planInstall(root, config, { mode, force = false }) {
   plan.notes.push(...init.notes);
   plan.warnings.push(...init.warnings);
 
-  // .prettierignore
+  plan.warnings.push(...stateWarnings(root, config));
+
+  // .prettierignore: Prettier reads neither the copy's settings nor STATE_ROOT's nested .gitignore.
+  const keepOut = [COPY_DIR, ...(usesStateRoot(config) ? [STATE_ROOT] : [])];
   const prettierFile = path.join(root, PRETTIER_IGNORE);
   if (existsSync(prettierFile)) {
     const text = readFileSync(prettierFile, 'utf8');
-    if (!text.split(/\r?\n/).some(coversCopy)) plan.prettier = `${text}${text === '' || text.endsWith('\n') ? '' : '\n'}${COPY_DIR}/\n`;
+    const lines = text.split(/\r?\n/);
+    const missing = keepOut.filter((dir) => !lines.some((line) => covers(line, dir)));
+    if (missing.length > 0)
+      plan.prettier = `${text}${text === '' || text.endsWith('\n') ? '' : '\n'}${missing.map((dir) => `${dir}/\n`).join('')}`;
   } else {
-    plan.nexts.push(`Prettier: add ${COPY_DIR}/ to your ignore file`);
+    plan.nexts.push(`Prettier: add ${keepOut.map((dir) => `${dir}/`).join(' and ')} to your ignore file`);
   }
   plan.nexts.push(`if ESLint or tsc check .claude/, exclude ${COPY_DIR}/ there`);
 
@@ -310,6 +376,7 @@ export function runInstall(root, config, { mode, force = false, beforeSwap } = {
     writeFileSync(path.join(root, SETTINGS_FILE), plan.settings);
   }
   if (plan.prettier !== null) writeFileSync(path.join(root, PRETTIER_IGNORE), plan.prettier);
+  if (usesStateRoot(config)) makeDir(path.join(root, STATE_ROOT));
   swapCopy(root, plan.copy, beforeSwap);
 
   const maintained = [DOCS_RULE, CONFIG_FILE, config.index.file, SETTINGS_FILE, `${COPY_DIR}/${MANIFEST}`].filter((file) =>

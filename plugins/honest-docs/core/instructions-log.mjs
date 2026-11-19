@@ -29,12 +29,13 @@
 //
 // The events discard systemMessage, so the log is the only output. Reading it is a manual step —
 // <logDir>/instructions-*.log, one file per session.
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import path from 'node:path';
-import { ConfigError, loadConfig, skippedRoots } from './config.mjs';
+import { ConfigError, loadConfig, skippedPath } from './config.mjs';
 import { logEvent } from './log.mjs';
 import { posixPath } from './posix-path.mjs';
 import { hookRoot } from './root.mjs';
+import { makeDir } from './state-dir.mjs';
 
 const SKILLS_DIR = '.claude/skills/';
 
@@ -42,12 +43,12 @@ function isNonEmptyString(value) {
   return typeof value === 'string' && value !== '';
 }
 
-function lineBody(input, root, ignoredRoots) {
-  /** Repo-relative POSIX path, or null for anything outside the repo or under an ignored root. */
+function lineBody(input, root, skipped) {
+  /** Repo-relative POSIX path, or null for anything outside the repo or in a skipped folder. */
   function repoRelative(filePath) {
     const rel = posixPath(path.relative(root, path.resolve(root, filePath)));
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
-    if (ignoredRoots.includes(rel.split('/')[0])) return null;
+    if (skipped(rel)) return null;
     return rel;
   }
 
@@ -98,11 +99,11 @@ export function instructionsLog(input) {
   }
   if (config.instructionsLog !== true) return { exitCode: 0 };
 
-  const body = lineBody(input, root, skippedRoots(config));
+  const body = lineBody(input, root, skippedPath(config));
   if (body) {
     const session = String(input.session_id ?? 'unknown').slice(0, 8);
     const logDir = path.join(root, config.logDir);
-    mkdirSync(logDir, { recursive: true });
+    makeDir(logDir);
     appendFileSync(path.join(logDir, `instructions-${session}.log`), `${new Date().toISOString()}  ${body}\n`);
   }
   return { exitCode: 0 };

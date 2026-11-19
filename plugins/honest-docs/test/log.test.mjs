@@ -70,7 +70,7 @@ test('the config moves it with logDir', (t) => {
 
 test('it never throws, even when the folder cannot be created', (t) => {
   const { root } = tmpRepo(t);
-  writeFiles(root, { artifacts: '' });
+  writeFiles(root, { '.claude/honest-docs-state': '' });
   asHook('1', () => assert.doesNotThrow(() => logEvent(root, 'probe')));
 });
 

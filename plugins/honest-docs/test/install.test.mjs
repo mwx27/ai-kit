@@ -27,6 +27,7 @@ import {
 } from './helpers.mjs';
 
 const COPY = '.claude/honest-docs';
+const STATE = '.claude/honest-docs-state';
 const SETTINGS = '.claude/settings.json';
 const DATED = '**Last Updated:** 2026-01-15 10:30 CET';
 const GOOD_DOC = `# Doc\n\n${DATED}\n\nText.\n`;
@@ -107,7 +108,7 @@ function settingsSession(root, session, env = {}) {
   const agent = agentSession(root, session, { run: (hook, payload) => runFromSettings(root, hook, payload, env) });
   const stop = () =>
     runFromSettings(root, 'stop-gate', { session_id: session, cwd: root, hook_event_name: 'Stop', permission_mode: 'default', stop_hook_active: false }, env);
-  const gateLog = () => readLines(path.join(root, `artifacts/logs/guard-gate-${session}.log`));
+  const gateLog = () => readLines(path.join(root, `.claude/honest-docs-state/logs/guard-gate-${session}.log`));
   return { ...agent, stop, gateLog };
 }
 
@@ -157,7 +158,7 @@ test('init on a 0.1.x project: copies the files, a manifest whose hashes match, 
   assert.deepEqual(settings.hooks.SessionStart[0], FOREIGN.hooks.SessionStart[0]);
   assert.deepEqual(mergeHooks(FOREIGN, { previous: null, next: copyHooks(), version: PLUGIN_VERSION }).settings, settings);
 
-  assert.equal(read(root, '.prettierignore'), `node_modules\n${COPY}/\n`);
+  assert.equal(read(root, '.prettierignore'), `node_modules\n${COPY}/\n${STATE}/\n`);
   assert.equal(read(root, '.claude/honest-docs.json'), '{ "docsDir": "_docs" }\n');
   assert.match(run.stdout, /^next: format the files written above the way the project formats them: .*\.claude\/settings\.json, \.prettierignore$/m);
   assert.match(run.stdout, /^next: if ESLint or tsc check \.claude\/, exclude \.claude\/honest-docs\/ there$/m);
@@ -443,10 +444,20 @@ test('a diff shows the lines removed and added with context', () => {
 test('.prettierignore: appended once; one with .claude/ untouched; none, not created and a next: line', (t) => {
   const { root } = legacyProject(t, { '.prettierignore': 'node_modules' });
   runInstall(root, 'init');
-  assert.equal(read(root, '.prettierignore'), `node_modules\n${COPY}/\n`);
+  assert.equal(read(root, '.prettierignore'), `node_modules\n${COPY}/\n${STATE}/\n`);
   const second = runInstall(root, 'update');
   assert.doesNotMatch(second.stdout, /prettierignore/);
-  assert.equal(read(root, '.prettierignore'), `node_modules\n${COPY}/\n`);
+  assert.equal(read(root, '.prettierignore'), `node_modules\n${COPY}/\n${STATE}/\n`);
+
+  // One that already covers the copy gets the state folder alone.
+  const copyOnly = legacyProject(t, { '.prettierignore': `${COPY}/\n` });
+  runInstall(copyOnly.root, 'init');
+  assert.equal(read(copyOnly.root, '.prettierignore'), `${COPY}/\n${STATE}/\n`);
+
+  // State and logs moved out of the state folder: only the copy is listed.
+  const moved = legacyProject(t, { '.prettierignore': '', '.claude/honest-docs.json': JSON.stringify({ stateDir: 'tmp/state', logDir: 'tmp/logs' }) });
+  runInstall(moved.root, 'init');
+  assert.equal(read(moved.root, '.prettierignore'), `${COPY}/\n`);
 
   const covered = legacyProject(t, { '.prettierignore': '/.claude/\n' });
   const run = runInstall(covered.root, 'init');
@@ -457,7 +468,52 @@ test('.prettierignore: appended once; one with .claude/ untouched; none, not cre
   rmSync(path.join(none.root, '.prettierignore'));
   const bare = runInstall(none.root, 'init');
   assert.equal(existsSync(path.join(none.root, '.prettierignore')), false);
-  assert.match(bare.stdout, /^next: Prettier: add \.claude\/honest-docs\/ to your ignore file$/m);
+  assert.match(bare.stdout, /^next: Prettier: add \.claude\/honest-docs\/ and \.claude\/honest-docs-state\/ to your ignore file$/m);
+});
+
+// Where the hooks write
+
+test('init makes the state folder with its .gitignore, so git status stays clean from the first run', (t) => {
+  const { root } = legacyProject(t);
+  runInstall(root, 'init');
+  assert.equal(read(root, `${STATE}/.gitignore`), '*\n');
+  assert.doesNotMatch(git(root, 'status', '--porcelain', '--untracked-files=all'), /honest-docs-state/);
+});
+
+test('warnings: files git tracks in the state folder, and a moved stateDir or logDir git does not ignore', (t) => {
+  const tracked = legacyProject(t, { [`${STATE}/logs/old.log`]: 'x\n' });
+  assert.match(
+    runInstall(tracked.root, 'init').stderr,
+    /^warning: git tracks 1 file under \.claude\/honest-docs-state\/, where the hooks keep session state and logs; remove it from the repo$/m
+  );
+
+  const config = JSON.stringify({ stateDir: 'tmp/state', logDir: 'logs' });
+  const moved = legacyProject(t, { '.claude/honest-docs.json': config, '.gitignore': 'logs/\n' });
+  const run = runInstall(moved.root, 'init');
+  assert.match(run.stderr, /^warning: git does not ignore tmp\/state\/, where the config keeps the hooks' state or logs; add it to \.gitignore, or they will show up in git status$/m);
+  assert.doesNotMatch(run.stderr, /does not ignore logs\//);
+  assert.equal(existsSync(path.join(moved.root, STATE)), false);
+});
+
+test('update names the state and logs of earlier versions, only those of honest-docs, and deletes nothing', (t) => {
+  const { root } = legacyProject(t, { '.gitignore': 'artifacts/\n' });
+  runInstall(root, 'init');
+  commitAll(root);
+  const earlier = {
+    'artifacts/claude-hooks/honest-docs/s/state.json': '{}\n',
+    'artifacts/claude-hooks/fingerprint-s.json': '{}\n',
+    'artifacts/logs/events.jsonl': '{}\n',
+    'artifacts/logs/guard-gate-a.log': 'x\n',
+    'artifacts/logs/guard-gate-b.log': 'x\n',
+    'artifacts/logs/guard-sh.log': 'x\n',
+  };
+  writeFiles(root, earlier);
+  const run = runInstall(root, 'update');
+  assert.match(
+    run.stderr,
+    /^warning: honest-docs no longer reads the state and logs of earlier versions; delete them when you no longer need them: artifacts\/claude-hooks\/honest-docs\/, artifacts\/logs\/events\.jsonl, artifacts\/logs\/guard-gate-\*\.log \(2 files\)$/m
+  );
+  for (const file of Object.keys(earlier)) assert.ok(existsSync(path.join(root, file)), file);
 });
 
 // In a session: K8 and an update under the copy's own hooks.

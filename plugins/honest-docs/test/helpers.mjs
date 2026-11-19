@@ -141,9 +141,13 @@ export function runInstall(cwd, mode, { args = [], pluginRoot = PLUGIN_ROOT, env
 export const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 export const readLines = (file) => readFileSync(file, 'utf8').split('\n').filter(Boolean);
 
+/** The default stateDir and logDir (core/config.mjs), repo-relative. */
+export const STATE_DIR = '.claude/honest-docs-state';
+export const LOG_DIR = `${STATE_DIR}/logs`;
+
 /** The event log (core/log.mjs) under the default logDir of `root`, parsed; [] when there is none. */
 export const eventLog = (root) => {
-  const file = path.join(root, 'artifacts', 'logs', 'events.jsonl');
+  const file = path.join(root, LOG_DIR, 'events.jsonl');
   return existsSync(file) ? readLines(file).map((line) => JSON.parse(line)) : [];
 };
 
@@ -172,7 +176,7 @@ export const writeDocsRule = (root) =>
   writeFiles(root, { '.claude/rules/docs.md': renderDocsRule(loadConfig(root)) });
 
 /** The session's state folder (core/session-state.mjs) under the default stateDir. */
-export const sessionPath = (root, session, file = '') => path.join(root, 'artifacts/claude-hooks/honest-docs', session, file);
+export const sessionPath = (root, session, file = '') => path.join(root, STATE_DIR, 'sessions', session, file);
 
 let toolCalls = 0;
 

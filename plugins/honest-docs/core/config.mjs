@@ -13,8 +13,10 @@
 //                   saying they do not exist
 //   index           the docs index docs-check verifies: `file`, the `groups` under docsDir it must
 //                   list, and the `rulesHeading` of the section that lists .claude/rules/
-//   stateDir        session state of the hooks; excluded from the changed files
-//   logDir          the gate's and the instructions log's files; excluded from the changed files
+//   stateDir        the hooks' state, a folder per session under `sessions/`; excluded from the
+//                   changed files (default: STATE_ROOT, below)
+//   logDir          the event log, the gate's and the instructions log's files; excluded from the
+//                   changed files (default: STATE_ROOT/logs)
 //   timeZone        IANA zone of the Last Updated stamp (default: the system's)
 //   guard.command   argv of the project's guard, called as `<argv…> --changed <files…>` after
 //                   docs-check passes; with none the Stop gate runs docs-check alone
@@ -34,6 +36,12 @@ export const CONFIG_FILE = '.claude/honest-docs.json';
 /** Where /honest-docs:init copies the hooks and scripts in a project (core/version.mjs). */
 export const COPY_DIR = '.claude/honest-docs';
 
+/**
+ * Where the hooks keep their state and logs unless the config moves them. The folder ignores itself
+ * in git (core/state-dir.mjs), so nothing in it reaches git status whatever the project's .gitignore says.
+ */
+export const STATE_ROOT = '.claude/honest-docs-state';
+
 /** A config file the project has but the plugin cannot use. The message starts with the file name. */
 export class ConfigError extends Error {
   constructor(detail) {
@@ -50,8 +58,8 @@ const DEFAULTS = {
   absentByDesign: [],
   absentScripts: [],
   index: { file: 'CLAUDE.md', groups: ['features', 'tools'], rulesHeading: 'Rules' },
-  stateDir: 'artifacts/claude-hooks',
-  logDir: 'artifacts/logs',
+  stateDir: STATE_ROOT,
+  logDir: `${STATE_ROOT}/logs`,
   timeZone: null,
   guard: { command: null },
   instructionsLog: false,
@@ -100,10 +108,21 @@ export function loadConfig(root) {
 /** The plugin's own folders, which no check counts as a change: its state, its logs and its copy. */
 export const ownDirs = (config) => [`${config.stateDir}/`, `${config.logDir}/`, `${COPY_DIR}/`];
 
-/** Top-level folders a scan of the tree never walks into: git, dependencies, the plugin's own output. */
-export const skippedRoots = (config) => [
-  ...new Set(['node_modules', '.git', config.stateDir.split('/')[0], config.logDir.split('/')[0]]),
-];
+/** Whether stateDir or logDir lies in STATE_ROOT, the folder that ignores itself. */
+export const usesStateRoot = (config) =>
+  [config.stateDir, config.logDir].some((dir) => dir === STATE_ROOT || dir.startsWith(`${STATE_ROOT}/`));
+
+const SKIPPED_NAMES = ['node_modules', '.git'];
+
+/**
+ * Whether a walk of the tree skips the repo-relative POSIX path `rel`: git and dependencies at any
+ * depth, and the plugin's state and logs by their full path, so a folder of the same name elsewhere
+ * (another `.claude/`, say) is still walked.
+ */
+export function skippedPath(config) {
+  const own = [`${config.stateDir}/`, `${config.logDir}/`];
+  return (rel) => rel.split('/').some((segment) => SKIPPED_NAMES.includes(segment)) || own.some((dir) => `${rel}/`.startsWith(dir));
+}
 
 /**
  * The root the scripts work on. They run from Bash, where CLAUDE_PROJECT_DIR is not set, so the

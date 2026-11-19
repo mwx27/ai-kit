@@ -60,9 +60,9 @@ by the same `.claude/honest-docs/core/doc-covers.mjs` as the doc reminder
 ([`hooks.md`](hooks.md#the-doc-reminder)).
 
 A path git ignores gets no verdict from `links`, `anchors` or `paths`, whether or not it is on disk,
-as an `absentByDesign` entry gets none: whether it exists depends on the machine. The plugin writes
-its own state under `artifacts/`, so without this a doc naming `artifacts/…` passed on a fresh clone
-and failed after the first session. The paths are asked in one `git check-ignore` call, which
+as an `absentByDesign` entry gets none: whether it exists depends on the machine. A doc naming a
+folder of local output, such as `artifacts/…`, passed on a fresh clone and failed once something
+was written there. The paths are asked in one `git check-ignore` call, which
 answers for paths that do not exist too; without git each one is checked as below.
 
 A backticked path that does not exist as written is tried as an import specifier before it is

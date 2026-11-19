@@ -43,11 +43,9 @@ The checks are installed into the project and committed with it, so they run for
 
    If your install turned it on for every project, set the same entry to `false` in `~/.claude/settings.json`; the project's setting wins.
 
-3. Add `artifacts/` to `.gitignore`. The checks keep their working files in `artifacts/claude-hooks/` and `artifacts/logs/`; `stateDir` and `logDir` move them.
+3. Run `/honest-docs:init`. It copies the checks into `.claude/honest-docs/`, adds their hooks to `.claude/settings.json`, writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md`, adds a Last Updated line to each doc that has none, and lists every file it wrote. It ends by saying how many docs problems the check finds; they do not block, but are worth fixing. The checks keep their working files in `.claude/honest-docs-state/`, which git ignores without an entry in your `.gitignore`.
 
-4. Run `/honest-docs:init`. It copies the checks into `.claude/honest-docs/`, adds their hooks to `.claude/settings.json`, writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md`, adds a Last Updated line to each doc that has none, and lists every file it wrote. It ends by saying how many docs problems the check finds; they do not block, but are worth fixing.
-
-5. Commit what it wrote: `.claude/honest-docs/`, `.claude/settings.json` and the rest of its list.
+4. Commit what it wrote: `.claude/honest-docs/`, `.claude/settings.json` and the rest of its list.
 
 After a plugin update, the next session opens with a notice to run `/honest-docs:update`; run it and commit again. A teammate needs no setup beyond pulling: the checks run from the repo. The plugin adds the notice and the `/honest-docs:` commands.
 

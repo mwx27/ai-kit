@@ -1,4 +1,5 @@
-// The hooks' session state: a folder per session, <stateDir>/honest-docs/<session_id>/.
+// The hooks' session state: a folder per session, <stateDir>/sessions/<session_id>/. SessionStart
+// removes the folders of sessions untouched for SESSION_MAX_AGE_MS (removeOldSessions).
 //
 //   state.json        the gate's and the reminder's state, below
 //   start.json        the docs problems there were when the session started (core/problems.mjs)
@@ -27,17 +28,64 @@
 //
 // A folder with a new name, so the 0.1.x gate, which reads honest-docs-<id>.json with version 1,
 // never meets this one.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { makeDir } from './state-dir.mjs';
 
 export const sessionKey = (id) => String(id ?? 'unknown').replace(/[^A-Za-z0-9_-]/g, '_') || 'unknown';
 
-/** <root>/<stateDir>/honest-docs/<session>/ */
-export const sessionDir = (root, config, session) => path.join(root, config.stateDir, 'honest-docs', session);
+/** <root>/<stateDir>/sessions/ */
+export const sessionsDir = (root, config) => path.join(root, config.stateDir, 'sessions');
+
+/** <root>/<stateDir>/sessions/<session>/ */
+export const sessionDir = (root, config, session) => path.join(sessionsDir(root, config), session);
+
+/**
+ * A session's folder is removed once nothing in it has changed for this long. A session resumed
+ * after that starts without a start set, which the first Stop takes without blocking (core/gate.mjs).
+ */
+export const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** The newest mtime in `dir`, the folder itself and everything under it included. */
+function newestChange(dir) {
+  let newest = statSync(dir).mtimeMs;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    newest = Math.max(newest, entry.isDirectory() ? newestChange(full) : statSync(full).mtimeMs);
+  }
+  return newest;
+}
+
+/**
+ * Removes the session folders in `parent` (sessionsDir) whose newest change is older than `maxAge`,
+ * except `keep`, and returns how many went. Never throws: a folder another session holds open
+ * (Windows: EBUSY) stays for the next SessionStart.
+ */
+export function removeOldSessions(parent, keep, maxAge = SESSION_MAX_AGE_MS, now = Date.now()) {
+  let entries = [];
+  try {
+    entries = readdirSync(parent, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  let removed = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === keep) continue;
+    const dir = path.join(parent, entry.name);
+    try {
+      if (now - newestChange(dir) <= maxAge) continue;
+      rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+      removed++;
+    } catch {
+      // Held open or gone already; the next SessionStart tries again.
+    }
+  }
+  return removed;
+}
 
 /** Writes `text` through a tmp file and a rename, so a reader never sees half of it. */
 export function writeAtomic(file, text) {
-  mkdirSync(path.dirname(file), { recursive: true });
+  makeDir(path.dirname(file));
   const tmp = `${file}.${process.pid}.tmp`;
   writeFileSync(tmp, text);
   renameSync(tmp, file);

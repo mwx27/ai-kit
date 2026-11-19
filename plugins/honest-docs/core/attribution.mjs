@@ -16,12 +16,13 @@
 // attributed.jsonl takes one line per path, appended with one write each: hooks on one event run in
 // parallel, and appends of a few hundred bytes do not interleave. A torn or unreadable line is skipped.
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { ownDirs } from './config.mjs';
 import { ignoredByGit } from './git-ignored.mjs';
 import { posixPath } from './posix-path.mjs';
 import { sessionKey, writeAtomic } from './session-state.mjs';
+import { makeDir } from './state-dir.mjs';
 
 /** A Pre with no Post (a cancelled or background Bash) is removed at Stop after this long. */
 export const STALE_PRE_MS = 15 * 60 * 1000;
@@ -32,7 +33,7 @@ const preFile = (dir, id) => path.join(dir, 'pre', `${sessionKey(id)}.json`);
 /** Appends one line per `{ path, deleted }` in `entries`, made by tool `by` in call `id`. */
 export function recordPaths(dir, { by, id, entries }) {
   if (entries.length === 0) return;
-  mkdirSync(dir, { recursive: true });
+  makeDir(dir);
   const ts = new Date().toISOString();
   for (const { path: file, deleted } of entries)
     appendFileSync(path.join(dir, ATTRIBUTED), `${JSON.stringify({ ts, by, id, path: file, ...(deleted ? { deleted: true } : {}) })}\n`);
