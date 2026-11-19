@@ -48,6 +48,7 @@ const init = (root) => {
 };
 const read = (root, file) => readFileSync(path.join(root, file), 'utf8');
 const NO_GUARD = '.claude/honest-docs.json sets no guard.command: the Stop gate runs the docs check alone.';
+const NEW_DOCS_DIR = '_docs/ does not exist yet; the first doc written there creates it';
 
 test('first run: writes the rule, the config skeleton and the current fragments', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': before() });
@@ -60,6 +61,7 @@ test('first run: writes the rule, the config skeleton and the current fragments'
       'wrote .claude/rules/docs.md',
       'created .claude/honest-docs.json',
       'wrote CLAUDE.md',
+      NEW_DOCS_DIR,
       NO_GUARD,
       `docs-policy: pre-0.1.0 → ${fragmentVersion('docs-policy')}`,
       '',
@@ -216,6 +218,7 @@ test('first run without the fragments: both appended under one heading, the rest
       'wrote .claude/rules/docs.md',
       'created .claude/honest-docs.json',
       'wrote CLAUDE.md',
+      NEW_DOCS_DIR,
       NO_GUARD,
       APPENDED('read-line and docs-policy'),
       '',
@@ -440,7 +443,44 @@ test('init that fails runs no docs check', (t) => {
   assert.deepEqual(run.nexts, []);
 });
 
-// P2: a docsDir that does not exist.
+// --docs-dir: the docs folder the user picks before init writes anything.
+
+test('--docs-dir sets docsDir in the config init creates, with a note, not a warning, for the new folder', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after() });
+  const run = runInstall(root, 'init', { args: ['--docs-dir', 'docs/'] });
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(read(root, '.claude/honest-docs.json')), { docsDir: 'docs', guard: { command: null } });
+  assert.match(read(root, '.claude/rules/docs.md'), /^---\npaths:\n {2}- 'docs\/\*\*\/\*\.md'\n---\n/);
+  assert.match(run.stdout, /^honest-docs-init: docs\/ does not exist yet; the first doc written there creates it$/m);
+  assert.doesNotMatch(run.stderr, /does not exist/);
+});
+
+test('--docs-dir refuses a path outside the repo or the repo root, and writes nothing', (t) => {
+  for (const bad of ['/abs/docs', '../docs', '.', './', 'C:/docs']) {
+    const { root } = tmpRepo(t, { 'CLAUDE.md': after() });
+    const run = runInstall(root, 'init', { args: ['--docs-dir', bad] });
+    assert.equal(run.status, 1, bad);
+    assert.equal(run.stderr, `honest-docs-init: --docs-dir ${JSON.stringify(bad)}: name a folder inside the repo, not its root\nhonest-docs-init: nothing written\n`);
+    assert.equal(existsSync(path.join(root, '.claude')), false, bad);
+  }
+});
+
+test('--docs-dir refuses where a config already sets docsDir, and with update', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '.claude/honest-docs.json': '{ "docsDir": "_docs" }\n' });
+  const run = runInstall(root, 'init', { args: ['--docs-dir', 'docs'] });
+  assert.equal(run.status, 1);
+  assert.equal(run.stderr, 'honest-docs-init: docsDir is set in .claude/honest-docs.json; edit it there\nhonest-docs-init: nothing written\n');
+  assert.equal(existsSync(path.join(root, '.claude/rules/docs.md')), false);
+
+  assert.equal(runInstall(root, 'init').status, 0);
+  const update = runInstall(root, 'update', { args: ['--docs-dir', 'docs'] });
+  assert.equal(update.status, 1);
+  assert.equal(update.stderr, 'honest-docs-update: --docs-dir is for init only; docsDir is set in .claude/honest-docs.json\nhonest-docs-update: nothing written\n');
+});
+
+// P2: a docsDir the config names that does not exist. A config is there in each, so the warning is due.
+
+const CONFIG = { '.claude/honest-docs.json': '{ "docsDir": "_docs" }\n' };
 
 const missingDocsDir = (folders) =>
   `warning: docsDir "_docs" does not exist, so the docs check scans no docs there; ${folders} ` +
@@ -448,6 +488,7 @@ const missingDocsDir = (folders) =>
 
 test('docsDir missing: a warning naming the folders that hold .md files, exit 0', (t) => {
   const { root } = tmpRepo(t, {
+    ...CONFIG,
     'CLAUDE.md': after(),
     'README.md': '# Root files are not a folder\n',
     'docs/index.md': '',
@@ -464,7 +505,7 @@ test('docsDir missing: a warning naming the folders that hold .md files, exit 0'
 });
 
 test('docsDir missing and no .md folder anywhere', (t) => {
-  const { root } = tmpRepo(t, { 'CLAUDE.md': after() });
+  const { root } = tmpRepo(t, { ...CONFIG, 'CLAUDE.md': after() });
   assert.equal(init(root).stderr, missingDocsDir('no folder holds .md files.'));
 });
 
@@ -476,7 +517,7 @@ test('docsDir missing on update: the copy its own templates are in is not named 
 
 test('docsDir missing: at most 10 folders named', (t) => {
   const files = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`d${String(i).padStart(2, '0')}/a.md`, '']));
-  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), ...files });
+  const { root } = tmpRepo(t, { ...CONFIG, 'CLAUDE.md': after(), ...files });
   const named = Array.from({ length: 10 }, (_, i) => `d${String(i).padStart(2, '0')}/ (1)`).join(', ');
   assert.equal(init(root).stderr, missingDocsDir(`folders holding .md files: ${named}, and 2 more.`));
 });

@@ -75,8 +75,11 @@ export const DEFAULT_LOG_DIR = DEFAULTS.logDir;
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const trimSlash = (p) => p.replace(/\/+$/, '');
 
-/** The config, defaults filled in. Throws a ConfigError on a file that is there but unusable. */
-export function loadConfig(root) {
+/**
+ * The config, defaults filled in. Throws a ConfigError on a file that is there but unusable.
+ * `overrides` stand in for keys of a config not written yet (init's --docs-dir, core/install.mjs).
+ */
+export function loadConfig(root, overrides = {}) {
   const file = path.join(root, CONFIG_FILE);
   let own = {};
   if (existsSync(file)) {
@@ -87,6 +90,7 @@ export function loadConfig(root) {
     }
   }
   if (!isObject(own)) throw new ConfigError('not a JSON object');
+  own = { ...own, ...overrides };
   if (own.guard != null) {
     if (!isObject(own.guard)) throw new ConfigError('guard must be an object, like { "command": [...] }');
     const { command } = own.guard;

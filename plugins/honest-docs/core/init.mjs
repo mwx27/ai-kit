@@ -41,8 +41,9 @@
 // AGENTS.md only where no CLAUDE.md exists, and the import is the form its memory docs give for
 // keeping both; any other gets a title, the project folder's name.
 //
-// Two things init warns about and does not stop for: a docsDir that does not exist, naming the
-// folders that do hold .md files; and a file it maintains that git ignores, which nobody else gets.
+// Two things init warns about and does not stop for: a docsDir the config names that does not exist,
+// naming the folders that do hold .md files; and a file it maintains that git ignores, which nobody
+// else gets. A docsDir that comes with the config this run writes gets a note instead: it is new.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -59,7 +60,6 @@ export const APPEND_HEADING = '## honest-docs';
 
 const TEMPLATES = path.join(PLUGIN_ROOT, 'templates');
 const STAMP = /^Written by \/honest-docs:init (\S+) — fixes go to the plugin, not this file\.$/;
-const SKELETON = { docsDir: '_docs', guard: { command: null } };
 
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -274,7 +274,11 @@ export function planInit(root, config, { mode = 'init' } = {}) {
   const warnings = [];
   const errors = [];
 
-  if (!existsSync(path.join(root, config.docsDir))) warnings.push(missingDocsDirWarning(root, config));
+  // A docsDir chosen now, with the config this run writes, is expected not to exist yet.
+  if (!existsSync(path.join(root, config.docsDir))) {
+    if (existsSync(path.join(root, CONFIG_FILE))) warnings.push(missingDocsDirWarning(root, config));
+    else notes.push(`${config.docsDir}/ does not exist yet; the first doc written there creates it`);
+  }
 
   const rulePath = path.join(root, DOCS_RULE);
   const rule = renderDocsRule(config);
@@ -283,7 +287,7 @@ export function planInit(root, config, { mode = 'init' } = {}) {
   const firstRun = oldRule === null || stampOf(oldRule) === null;
 
   if (!existsSync(path.join(root, CONFIG_FILE)))
-    writes.push({ file: CONFIG_FILE, text: `${JSON.stringify(SKELETON, null, 2)}\n` });
+    writes.push({ file: CONFIG_FILE, text: `${JSON.stringify({ docsDir: config.docsDir, guard: { command: null } }, null, 2)}\n` });
   if (!config.guard.command) notes.push(`${CONFIG_FILE} sets no guard.command: the Stop gate runs the docs check alone.`);
   const dated = datedDocs(root, config);
   writes.push(...dated.writes);

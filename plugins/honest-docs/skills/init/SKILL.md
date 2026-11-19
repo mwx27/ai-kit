@@ -6,8 +6,30 @@ disable-model-invocation: true
 
 # honest-docs init
 
-Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/install.mjs" --mode init` with the Bash tool and show its
-output verbatim.
+When the project has no `.claude/honest-docs.json`, first ask with `AskUserQuestion`: "Which folder
+should hold the docs about this project's code? honest-docs checks that the docs there stay true to
+the code." Offer these options, with these descriptions:
+
+- `_docs/` (Recommended): docs about the code, for the people and agents working on it. The
+  underscore keeps the folder near the top of the file tree, and leaves `docs/` free for a
+  documentation website.
+- `docs/`: the most familiar name. Pick it only when the project does not publish a documentation
+  website from `docs/`.
+- An existing docs folder, if there is one: keeps the docs where they are, so no link breaks. Pick
+  it only when they are docs about the code, not pages of a published website. A docs folder is one
+  at the first or second level named `docs`, `doc`, `documentation`, `_docs` or `wiki` that holds
+  `.md` files; with several, offer the one holding the most, and give its `.md` count.
+- Help me choose: read [`docs-folder.md`](${CLAUDE_PLUGIN_ROOT}/references/docs-folder.md), sum it
+  up for the user in a few sentences, then ask again without this option.
+
+Never offer as the existing folder one under `node_modules/` or `.claude/`, a folder git ignores,
+or one a docs-site config publishes (`docusaurus.config.*`, `mkdocs.yml`,
+`.vitepress/`, GitHub Pages from `/docs`): name that one to the user as a website. Never offer to
+move docs. Without `AskUserQuestion`, skip the question and say in one sentence that docs go in
+`_docs/`.
+
+Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/install.mjs" --mode init`, adding `--docs-dir <folder>` when
+the user picked one, with the Bash tool and show its output verbatim.
 
 It copies the hooks and the docs check into `.claude/honest-docs/`, adds the hooks to
 `.claude/settings.json`, writes `.claude/rules/docs.md`, the `CLAUDE.md` passages and a starter

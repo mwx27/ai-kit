@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // /honest-docs:init and /honest-docs:update (core/install.mjs):
 //
-//   node install.mjs --mode init|update [--force]
+//   node install.mjs --mode init|update [--force] [--docs-dir <folder>]
+//
+// --docs-dir, init only, sets docsDir in the config init creates (core/install.mjs).
 //
 // Prints what it wrote, then `honest-docs-init: installed X` or `honest-docs-update: updated X → Y`
 // with the CHANGELOG sections in between, then `next:` lines for the agent and `warning:` lines
@@ -18,13 +20,16 @@ import { SETTINGS_FILE } from '../core/settings-merge.mjs';
 
 let mode = null;
 let force = false;
-for (const [i, arg] of process.argv.slice(2).entries()) {
-  if (arg === '--force') force = true;
-  else if (arg === '--mode') mode = process.argv[i + 3] ?? '';
-  else if (process.argv[i + 1] !== '--mode') mode = '';
+let docsDir;
+const args = process.argv.slice(2);
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--force') force = true;
+  else if (args[i] === '--mode') mode = args[++i] ?? '';
+  else if (args[i] === '--docs-dir') docsDir = args[++i] ?? '';
+  else mode = '';
 }
 if (!['init', 'update'].includes(mode)) {
-  console.error('usage: install.mjs --mode init|update [--force]');
+  console.error('usage: install.mjs --mode init|update [--force] [--docs-dir <folder>]');
   process.exit(2);
 }
 const tag = `honest-docs-${mode}`;
@@ -39,7 +44,7 @@ try {
   process.exit(2);
 }
 
-const plan = runInstall(ROOT, config, { mode, force });
+const plan = runInstall(ROOT, config, { mode, force, docsDir });
 if (plan.refusal || plan.errors.length > 0) {
   for (const e of [plan.refusal, ...plan.errors].filter(Boolean)) console.error(`${tag}: ${e}`);
   for (const { diff } of plan.conflicts) process.stderr.write(diff);
