@@ -422,7 +422,7 @@ test('without git the folders are walked on disk, ignored files included, and it
   assert.match(run.stderr, /^docs-check: 4 problem\(s\) in 6 files$/m);
 });
 
-/** A doc naming paths under `artifacts/`, which git ignores: the plugin writes its state there. */
+/** A doc naming paths under `artifacts/`, which git ignores: they exist on one machine and not the next. */
 function artifactsProject(t, { onDisk }) {
   const project = cleanProject(t);
   writeFiles(project.root, { '.gitignore': 'artifacts/\n' });

@@ -142,8 +142,8 @@ test('a copy hook started for the main checkout acts on the worktree its cwd is 
   // CLAUDE_PROJECT_DIR stays at the main checkout, as Claude Code keeps it.
   const run = runCopyHook(copy, 'stop-gate', payload('stop-gate', worktree), { projectDir: root });
   assert.equal(run.status, 0, run.stderr);
-  assert.ok(existsSync(path.join(worktree, 'artifacts/logs/guard-gate-s.log')));
-  assert.equal(existsSync(path.join(root, 'artifacts')), false);
+  assert.ok(existsSync(path.join(worktree, '.claude/honest-docs-state/logs/guard-gate-s.log')));
+  assert.equal(existsSync(path.join(root, '.claude/honest-docs-state/logs')), false);
 });
 
 test('a copy hook whose cwd is in a sibling repo without the copy exits 0 and writes nothing', (t) => {
@@ -191,7 +191,7 @@ test('copy hooks in a worktree attribute paths relative to the worktree root', (
   session.write('src/a.ts', '1\n');
   session.bash(() => writeFiles(worktree, { 'src/b.ts': '1\n' }));
   assert.deepEqual(attributedLines(worktree, 's').map((e) => e.path), ['src/a.ts', 'src/b.ts']);
-  assert.equal(existsSync(path.join(root, 'artifacts')), false);
+  assert.equal(existsSync(path.join(root, '.claude/honest-docs-state/sessions')), false);
 });
 
 test('a worktree whose copy is another version: the gate skips the turn, tells the user and does not block', (t) => {
@@ -209,7 +209,7 @@ test('a worktree whose copy is another version: the gate skips the turn, tells t
     JSON.parse(run.stdout).systemMessage,
     `honest-docs: this tree holds honest-docs 0.2.1, the hooks running are ${PLUGIN_VERSION}. The Stop gate checked nothing this turn.`
   );
-  assert.match(readFileSync(path.join(worktree, 'artifacts/logs/guard-gate-s.log'), 'utf8'), / {2}- {2}version-mismatch\n$/);
+  assert.match(readFileSync(path.join(worktree, '.claude/honest-docs-state/logs/guard-gate-s.log'), 'utf8'), / {2}- {2}version-mismatch\n$/);
 });
 
 test('session start from a copy names the copy command for the problems', (t) => {

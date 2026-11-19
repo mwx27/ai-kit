@@ -38,8 +38,8 @@ test('a path outside the root, in the plugin\'s folders or ignored by git is not
   const p = project(t, { '.gitignore': 'build/\n' });
   writeFiles(p.dir, { 'elsewhere.ts': '1\n' });
   p.editor('build/out.js', '1\n');
-  p.editor('artifacts/logs/x.md', '1\n');
-  for (const file of [path.join(p.dir, 'elsewhere.ts'), '../elsewhere.ts', path.join(p.root, 'build/out.js'), path.join(p.root, 'artifacts/logs/x.md')])
+  p.editor('.claude/honest-docs-state/logs/x.md', '1\n');
+  for (const file of [path.join(p.dir, 'elsewhere.ts'), '../elsewhere.ts', path.join(p.root, 'build/out.js'), path.join(p.root, '.claude/honest-docs-state/logs/x.md')])
     assert.equal(p.session.tool('Write', { file_path: file }).status, 0);
   p.session.tool('Write', {});
   assert.deepEqual(p.recorded(), []);

@@ -41,6 +41,22 @@ A config or manifest it cannot read is named in the notice instead.
 Stop, including those where nothing changed and the gate exits in a millisecond. The gate prints
 one line only when it ran.
 
+## Where they write
+
+The hooks keep their state and logs in `.claude/honest-docs-state/`: one folder per session under
+`sessions/` (`stateDir`), and `logs/` (`logDir`). The folder holds a `.gitignore` of `*`, written
+with it, so nothing in it reaches `git status` whatever the project's `.gitignore` says; every hook
+makes its folders through `.claude/honest-docs/core/state-dir.mjs`, the one place that writes it.
+Prettier does not read a nested `.gitignore`, so install lists the folder in `.prettierignore`
+beside the copy. SessionStart removes the folder of a session nothing has changed in for 30 days;
+a session resumed after that starts as one without a start set
+([below](#sessionstart-the-start-set)). The logs stay: they are measurements.
+
+A `stateDir` or `logDir` moved elsewhere gets no `.gitignore`: the project chose the place, and
+init and update warn when git does not ignore it. They also warn about files git tracks there, and
+name what 0.2.0 and earlier left in `artifacts/` (`artifacts/claude-hooks/honest-docs/` and
+honest-docs' own files in `artifacts/logs/`), which nothing reads now; they delete nothing.
+
 ## The project root
 
 A hook acts on the git repository holding its input's `cwd`, not on `CLAUDE_PROJECT_DIR`: that stays
@@ -66,7 +82,7 @@ tree. Each changed path is appended to the session's `attributed.jsonl`
   code.
 
 Not attributed: paths outside the root, ignored by git, or in honest-docs' own folders (`stateDir`,
-`logDir` and the copy); a Bash call with no stored tree (hooks added mid-call), which records
+`logDir` and the copy, [above](#where-they-write)); a Bash call with no stored tree (hooks added mid-call), which records
 nothing; and a path that went from dirty back to `HEAD` with its content unchanged, a commit rather
 than a change. Doubtful cases go to not attributing: a false block costs more than a gap. A stored
 tree with no Post is removed after 15 minutes, at the next Stop.
@@ -221,8 +237,8 @@ estimate. `changed` counts the attributed paths. To run it by hand, attribute a 
 and feed the gate its payload; the first run takes the start set:
 
 ```bash
-mkdir -p <stateDir>/honest-docs/manual
-echo '{"path":"<doc>"}' >> <stateDir>/honest-docs/manual/attributed.jsonl
+mkdir -p <stateDir>/sessions/manual
+echo '{"path":"<doc>"}' >> <stateDir>/sessions/manual/attributed.jsonl
 echo "{\"session_id\":\"manual\",\"cwd\":\"$PWD\"}" | node .claude/honest-docs/hooks/stop-gate.mjs
 ```
 

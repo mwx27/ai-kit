@@ -10,10 +10,11 @@
 // Only a process a hook started writes: hooks/io.mjs sets HONEST_DOCS_HOOK=1, and what the hook
 // spawns (docs-check, the guard) inherits it. A script run from a terminal, CI or the agent's Bash
 // writes nothing. A config that cannot be read sends the line to the default logDir. It never throws.
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_LOG_DIR, loadConfig } from './config.mjs';
+import { makeDir } from './state-dir.mjs';
 import { installedVersion } from './version.mjs';
 
 export const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,7 +36,7 @@ export function logEvent(root, event, fields = {}) {
       // A broken config is what some events report; they still need somewhere to go.
     }
     const dir = path.join(root, logDir);
-    mkdirSync(dir, { recursive: true });
+    makeDir(dir);
     const record = {
       ts: new Date().toISOString(),
       event,

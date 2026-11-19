@@ -9,8 +9,8 @@ import { test } from 'node:test';
 import { COPY, PLUGIN_ROOT, agentSession, docsBaseline, escapeRegExp, eventLog, git, readJson, readLines, runHook, sessionPath, tmpRepo, writeDocsRule, writeFiles } from './helpers.mjs';
 
 const SESSION = 'gate-session';
-const STATE = `artifacts/claude-hooks/honest-docs/${SESSION}/state.json`;
-const GATE_LOG = `artifacts/logs/guard-gate-${SESSION}.log`;
+const STATE = `.claude/honest-docs-state/sessions/${SESSION}/state.json`;
+const GATE_LOG = `.claude/honest-docs-state/logs/guard-gate-${SESSION}.log`;
 
 /** Records every call to GUARD_RECORD, prints GUARD_OUTPUT, exits GUARD_EXIT. */
 const GUARD = `import { appendFileSync } from 'node:fs';
@@ -489,12 +489,14 @@ test('a doc already carrying its stamp is not rewritten', (t) => {
 
 test('stateDir, logDir and the copy folder are never attributed, whatever .gitignore says', (t) => {
   const p = project(t);
-  // The fixture has no .gitignore: the folders show up as untracked in git status.
-  p.write('artifacts/claude-hooks/note.md', 'x\n');
-  p.write('artifacts/logs/note.md', 'x\n');
+  // The state folder's own .gitignore removed: its files show up as untracked in git status.
+  p.write('.claude/honest-docs-state/note.md', 'x\n');
+  p.write('.claude/honest-docs-state/logs/note.md', 'x\n');
   p.write('.claude/honest-docs/note.md', 'x\n');
-  p.session.bash(() => p.editor('artifacts/logs/other.md', 'x\n'));
-  assert.ok(git(p.root, 'status', '--porcelain', '--untracked-files=all').includes('artifacts/'));
+  rmSync(path.join(p.root, '.claude/honest-docs-state/.gitignore'), { force: true });
+  p.session.bash(() => p.editor('.claude/honest-docs-state/logs/other.md', 'x\n'));
+  rmSync(path.join(p.root, '.claude/honest-docs-state/.gitignore'), { force: true });
+  assert.ok(git(p.root, 'status', '--porcelain', '--untracked-files=all').includes('.claude/honest-docs-state/'));
   assert.equal(p.stop().stdout, '');
   assert.match(p.gateLog()[0], / {2}nothing-attributed$/);
 
@@ -511,7 +513,7 @@ test('custom stateDir and logDir are excluded too', (t) => {
   git(p.root, 'commit', '-q', '-am', 'dirs');
   p.write('src/a.ts', 'export const a = 2;\n');
   p.stop();
-  assert.ok(existsSync(path.join(p.root, `tmp/state/honest-docs/${SESSION}/state.json`)));
+  assert.ok(existsSync(path.join(p.root, `tmp/state/sessions/${SESSION}/state.json`)));
   assert.ok(existsSync(path.join(p.root, `tmp/logs/guard-gate-${SESSION}.log`)));
   assert.equal(p.stop().stdout, '');
   assert.equal(p.calls().length, 1);
@@ -596,7 +598,7 @@ test('an unreadable payload exits 0', (t) => {
   const p = project(t);
   const run = runHook('stop-gate', undefined, { root: p.root });
   assert.equal(run.status, 0);
-  assert.match(readFileSync(path.join(p.root, 'artifacts/logs/guard-gate-unknown.log'), 'utf8'), /skipped .* no-input\n$/);
+  assert.match(readFileSync(path.join(p.root, '.claude/honest-docs-state/logs/guard-gate-unknown.log'), 'utf8'), /skipped .* no-input\n$/);
 });
 
 // "Don't make it worse": only a problem new against the start set and caused by the session blocks.

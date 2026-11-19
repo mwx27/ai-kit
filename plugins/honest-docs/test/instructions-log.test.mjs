@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { eventLog, readLines, runHook, tmpRepo } from './helpers.mjs';
 
 const SESSION = 'abcdef12-3456-7890';
-const LOG = 'artifacts/logs/instructions-abcdef12.log';
+const LOG = '.claude/honest-docs-state/logs/instructions-abcdef12.log';
 const TS = '\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z';
 
 function project(t, config) {
@@ -35,13 +35,13 @@ const events = (root) => [
 test('off by default: writes nothing', (t) => {
   const p = project(t);
   for (const payload of events(p.root)) assert.equal(p.send(payload).status, 0);
-  assert.equal(existsSync(path.join(p.root, 'artifacts')), false);
+  assert.equal(existsSync(path.join(p.root, '.claude/honest-docs-state')), false);
 });
 
 test('off when instructionsLog is anything but true', (t) => {
   const p = project(t, { instructionsLog: 'yes' });
   p.send(events(p.root)[0]);
-  assert.equal(existsSync(path.join(p.root, 'artifacts')), false);
+  assert.equal(existsSync(path.join(p.root, '.claude/honest-docs-state')), false);
 });
 
 test('on: load, write: and skill: lines in the order they happened', (t) => {
@@ -71,7 +71,7 @@ test('on: what the log leaves out', (t) => {
   tool('Read', path.join(p.root, 'src/a.ts')); // a Read outside .claude/skills/
   tool('Read', '/elsewhere/plugin/skills/docs-audit/SKILL.md'); // a plugin skill, outside the project
   tool('Write', '/elsewhere/file.ts'); // outside the repo
-  tool('Write', path.join(p.root, 'artifacts/notes.md')); // under the top folder of stateDir/logDir
+  tool('Write', path.join(p.root, '.claude/honest-docs-state/notes.md')); // in stateDir
   tool('Edit', path.join(p.root, 'node_modules/x/index.js'));
   p.send({ hook_event_name: 'PostToolUse', tool_name: 'Skill', tool_input: {} });
   p.send({ hook_event_name: 'UserPromptExpansion', expansion_type: 'other', command_name: 'x' });
@@ -84,6 +84,6 @@ test('a broken config: silent exit 0, nothing written, config-error in the event
   const run = runHook('instructions-log', { session_id: SESSION, ...events(root)[0] }, { root });
   assert.deepEqual([run.status, run.stdout, run.stderr], [0, '', '']);
   // The event log, in the default logDir since the config cannot name one, and no instructions log.
-  assert.deepEqual(readdirSync(path.join(root, 'artifacts', 'logs')), ['events.jsonl']);
+  assert.deepEqual(readdirSync(path.join(root, '.claude/honest-docs-state/logs')), ['events.jsonl']);
   assert.deepEqual(eventLog(root).map((e) => [e.event, e.reason]), [['instructions-log', 'config-error']]);
 });

@@ -4,7 +4,7 @@
 on Edit|Write|Skill|Read.
 
 Off by default. With `instructionsLog: true` in `.claude/honest-docs.json` it appends one line per
-event to `<logDir>/instructions-<session>.log` (`logDir`, `artifacts/logs/` by default; `<session>`
+event to `<logDir>/instructions-<session>.log` (`logDir`, `.claude/honest-docs-state/logs/` by default; `<session>`
 is the first 8 characters of the session id), every kind into the same file so they read in the
 order they happened. What this page says about Claude Code itself is marked _(documented)_ or _(observed, <month>)_, as in
 [`instruction-channels.md`](instruction-channels.md).
@@ -36,8 +36,8 @@ has no event for it, so the log cannot see it.
 
 Every path in the log is repo-relative POSIX (`/`) on every OS, which on macOS and Linux leaves the
 load format as it always was; a write or skill-read path outside the repo is dropped, and so is
-anything under `node_modules/`, `.git/` or the top folder of `stateDir` and `logDir` (`artifacts/`
-by default) — the folders docs-check never walks.
+anything under `node_modules/` or `.git/` at any depth, or under `stateDir` and `logDir` — the
+folders docs-check never walks.
 
 The log is raw and append-only — no deduplication, no aggregation. Counting unique files, or
 reloads after a compaction, is the reporting step's job, and it needs every line to do it.

@@ -8,7 +8,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { skippedRoots } from './config.mjs';
+import { skippedPath } from './config.mjs';
 import { posixPath } from './posix-path.mjs';
 
 /**
@@ -37,7 +37,7 @@ const trimSlash = (p) => p.replace(/\/+$/, '');
  * `git` is false when the disk walk stood in. `listed` is listRepoFiles(root), for a caller that has it.
  */
 export function docSet(root, config, { dirs = config.scan.dirs, files = config.scan.files } = {}, listed = listRepoFiles(root)) {
-  const skipped = skippedRoots(config);
+  const skipped = skippedPath(config);
   const docs = new Set();
   const dangling = new Set();
 
@@ -55,7 +55,7 @@ export function docSet(root, config, { dirs = config.scan.dirs, files = config.s
       if (rel.endsWith('.md')) docs.add(rel);
       return;
     }
-    for (const entry of readdirSync(full)) if (!skipped.includes(entry)) visit(`${rel}/${entry}`);
+    for (const entry of readdirSync(full)) if (!skipped(`${rel}/${entry}`)) visit(`${rel}/${entry}`);
   };
 
   const scanned = dirs.map(trimSlash);

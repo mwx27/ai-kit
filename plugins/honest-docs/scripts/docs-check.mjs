@@ -230,8 +230,8 @@ for (const doc of docs) {
 }
 
 /*
- * A path git ignores exists on one machine and not on the next (the plugin's own `artifacts/` is
- * there after the first session), so a doc naming one gets no verdict either way, as with
+ * A path git ignores exists on one machine and not on the next (local output appears once
+ * something writes it), so a doc naming one gets no verdict either way, as with
  * absentByDesign. One call for all of them; a path outside the repo would fail it, and git cannot
  * ignore one anyway. Without git (said above) every finding stands.
  */

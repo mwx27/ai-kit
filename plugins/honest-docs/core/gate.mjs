@@ -54,7 +54,7 @@
 // all. The same outcome goes to the shared event log (core/log.mjs).
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import path from 'node:path';
 import { readAttributed, removeStalePre } from './attribution.mjs';
 import { hashFiles } from './changed-files.mjs';
@@ -64,6 +64,7 @@ import { PLUGIN_ROOT, logEvent, pluginVersion } from './log.mjs';
 import { causedBy, countByKey, docsCheckCommand, newOccurrences, runDocsCheck } from './problems.mjs';
 import { hookRoot } from './root.mjs';
 import { readStartSet, sessionDir, sessionKey, sessionStore, writeStartSet } from './session-state.mjs';
+import { makeDir } from './state-dir.mjs';
 import { installedVersion } from './version.mjs';
 
 /** Identical failures tolerated before the gate concedes and lets the stop through. */
@@ -138,7 +139,7 @@ export function gate(input) {
     logEvent(root, 'gate', { kind, outcome, reason: reason && reason !== check ? reason : undefined, check, changed, checked, ms });
     if (!logDir) return;
     try {
-      mkdirSync(logDir, { recursive: true });
+      makeDir(logDir);
       appendFileSync(
         path.join(logDir, `guard-gate-${session}.log`),
         `${new Date().toISOString()}  ${kind}  changed=${changed} checked=${checked}  ms=${ms}  ${outcome}${reason ? `  ${reason}` : ''}\n`
