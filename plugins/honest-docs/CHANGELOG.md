@@ -6,6 +6,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.2.1] — 2026-11-19
+
+### Changed
+
+- **The checks keep their working files in `.claude/honest-docs-state/`, which git ignores on its own.** It holds a `.gitignore` of its own, so setup no longer asks you to add `artifacts/` to yours. Install also lists the folder in `.prettierignore`. A `stateDir` or `logDir` you set elsewhere stays where it is; init and update warn when git does not ignore it. The files earlier versions left in `artifacts/` are named once by update, never deleted.
+- **`/honest-docs:init` asks which folder holds the docs about your code**, before it writes anything: `_docs/`, `docs/` or a docs folder the project already has. One option explains the choice, from [`references/docs-folder.md`](references/docs-folder.md). A docs folder chosen there that does not exist yet gets a note, not a warning.
+- **`/honest-docs:init` creates a missing `CLAUDE.md`.** Next to an `AGENTS.md`, it starts the new file with `@AGENTS.md`: Claude Code reads `AGENTS.md` only where there is no `CLAUDE.md`, so without the import the agent would lose it. `/honest-docs:update` still stops on a missing `CLAUDE.md`, since someone removed it.
+
+### Added
+
+- **Sessions untouched for 30 days are removed** at session start. The logs stay.
+- **`/honest-docs:init` refuses outside a git repository**, and init and update warn when the project has no `.gitignore` or leaves `node_modules/` unignored: the hooks look at every untracked file around each Bash call and would run out of time.
+
+### Fixed
+
+- **The warning about a missing docs folder says to run `/honest-docs:update`.** It said `init`, which refuses once the checks are installed.
+- **A walk of the docs without git skips only honest-docs' own folders.** It skipped every folder named like their top one, so with the files under `.claude/` it would have skipped `.claude/rules/` as well.
+
+---
+
 ## [0.2.0] — 2026-11-14
 
 A project on 0.1.x moves by running `/honest-docs:init`, not `update`: there is no copy to update yet. Then commit what it wrote.

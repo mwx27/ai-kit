@@ -198,7 +198,7 @@ test('a worktree whose copy is another version: the gate skips the turn, tells t
   const { root, copy, dir } = initialised(t);
   const worktree = path.join(dir, 'wt');
   git(root, 'worktree', 'add', '-q', worktree);
-  writeFiles(worktree, { [`${COPY}/manifest.json`]: JSON.stringify({ version: '0.2.1', files: {}, hooks: {} }) });
+  writeFiles(worktree, { [`${COPY}/manifest.json`]: JSON.stringify({ version: '0.0.1', files: {}, hooks: {} }) });
   const session = copySession(copy, root, worktree);
   session.write('_docs/doc.md', '# Doc\n\nSee [gone](gone.md).\n');
 
@@ -207,7 +207,7 @@ test('a worktree whose copy is another version: the gate skips the turn, tells t
   assert.equal(run.stderr, '');
   assert.equal(
     JSON.parse(run.stdout).systemMessage,
-    `honest-docs: this tree holds honest-docs 0.2.1, the hooks running are ${PLUGIN_VERSION}. The Stop gate checked nothing this turn.`
+    `honest-docs: this tree holds honest-docs 0.0.1, the hooks running are ${PLUGIN_VERSION}. The Stop gate checked nothing this turn.`
   );
   assert.match(readFileSync(path.join(worktree, '.claude/honest-docs-state/logs/guard-gate-s.log'), 'utf8'), / {2}- {2}version-mismatch\n$/);
 });
