@@ -57,7 +57,10 @@ this file carries only the repo-specific deltas.
 
 ## Versioning
 
-SemVer, `0.x` until an interface settles. Each plugin owns one `CHANGELOG.md`
+SemVer, `0.x` until an interface settles. In honest-docs a minor marks a new stage — a new
+mechanism, or a new way of installing — and everything else, new checks and behaviour changes
+included, is a patch; a release that asks the user for more than `/honest-docs:update` says what,
+first thing in its `CHANGELOG.md` entry. Each plugin owns one `CHANGELOG.md`
 ([Keep a Changelog](https://keepachangelog.com/)), shared by its skills. A version bump
 changes `version` in `.claude-plugin/plugin.json` and adds a `CHANGELOG.md` entry. Only a
 skill that states its own version (cv-bullets) also carries a `Current version:` footer in
