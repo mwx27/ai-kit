@@ -36,6 +36,11 @@
 // ignores. A doc with no H1 is left alone with a warning; one with two or more such lines too, and
 // docs-check reports it.
 //
+// Without index.file, init creates it, and update reports it missing: there someone removed it. A
+// CLAUDE.md init creates beside an AGENTS.md opens with `@AGENTS.md`, since Claude Code reads
+// AGENTS.md only where no CLAUDE.md exists, and the import is the form its memory docs give for
+// keeping both; any other gets a title, the project folder's name.
+//
 // Two things init warns about and does not stop for: a docsDir that does not exist, naming the
 // folders that do hold .md files; and a file it maintains that git ignores, which nobody else gets.
 import { execFileSync } from 'node:child_process';
@@ -45,6 +50,7 @@ import { CONFIG_FILE, COPY_DIR } from './config.mjs';
 import { docSet } from './doc-set.mjs';
 import { LAST_UPDATED_LINE, lastUpdatedLine } from './last-updated.mjs';
 import { PLUGIN_ROOT, pluginVersion } from './log.mjs';
+import { posixPath } from './posix-path.mjs';
 import { MANIFEST } from './version.mjs';
 
 export const DOCS_RULE = '.claude/rules/docs.md';
@@ -183,7 +189,7 @@ function missingDocsDirWarning(root, config) {
   return (
     `docsDir "${config.docsDir}" does not exist, so the docs check scans no docs there; ` +
     (shown.length > 0 ? `folders holding .md files: ${shown.join(', ')}. ` : 'no folder holds .md files. ') +
-    `Set docsDir in ${CONFIG_FILE}, then run /honest-docs:init again.`
+    `Set docsDir in ${CONFIG_FILE}, then run /honest-docs:update.`
   );
 }
 
@@ -250,12 +256,19 @@ export function stampOf(text) {
   return text.trimEnd().split('\n').at(-1).match(STAMP)?.[1] ?? null;
 }
 
+/** What init writes into an index.file that does not exist yet, before the fragments. */
+function newIndexText(root, indexFile) {
+  const agents = path.join(path.dirname(indexFile), 'AGENTS.md');
+  if (path.basename(indexFile) === 'CLAUDE.md' && existsSync(path.join(root, agents))) return { text: '@AGENTS.md\n', imports: agents };
+  return { text: `# ${path.basename(root)}\n`, imports: null };
+}
+
 /**
  * Plans the writes without making any. Returns `{ writes: [{ file, text }], notes, warnings, errors }`:
  * a write for each file whose content changes, and an error for each fragment found twice or more, or
- * found nowhere after the first run.
+ * found nowhere after the first run. `mode` is init or update: only init creates a missing index.file.
  */
-export function planInit(root, config) {
+export function planInit(root, config, { mode = 'init' } = {}) {
   const writes = [];
   const notes = [];
   const warnings = [];
@@ -279,12 +292,19 @@ export function planInit(root, config) {
 
   const indexFile = config.index.file;
   const indexPath = path.join(root, indexFile);
-  if (!existsSync(indexPath)) {
+  let original = null;
+  let text;
+  if (existsSync(indexPath)) {
+    original = readFileSync(indexPath, 'utf8');
+    text = original;
+  } else if (mode === 'init') {
+    const created = newIndexText(root, indexFile);
+    text = created.text;
+    notes.push(`created ${indexFile}${created.imports ? `, importing ${posixPath(created.imports)} so Claude Code still reads it` : ''}`);
+  } else {
     errors.push(`${indexFile} not found`);
     return { writes, notes, warnings, errors };
   }
-  const original = readFileSync(indexPath, 'utf8');
-  let text = original;
   const missing = [];
   for (const name of FRAGMENTS) {
     const versions = fragmentVersions(name);

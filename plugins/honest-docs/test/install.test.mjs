@@ -20,6 +20,7 @@ import {
   readJson,
   readLines,
   runInstall,
+  runScript,
   sessionPath,
   tmpRepo,
   writeDocsRule,
@@ -514,6 +515,38 @@ test('update names the state and logs of earlier versions, only those of honest-
     /^warning: honest-docs no longer reads the state and logs of earlier versions; delete them when you no longer need them: artifacts\/claude-hooks\/honest-docs\/, artifacts\/logs\/events\.jsonl, artifacts\/logs\/guard-gate-\*\.log \(2 files\)$/m
   );
   for (const file of Object.keys(earlier)) assert.ok(existsSync(path.join(root, file)), file);
+});
+
+// A new project
+
+test('warnings: no .gitignore, or one that leaves node_modules/ where there is a package.json', (t) => {
+  const none = legacyProject(t);
+  rmSync(path.join(none.root, '.gitignore'));
+  commitAll(none.root);
+  assert.match(runInstall(none.root, 'init').stderr, /^warning: this repo has no \.gitignore; the hooks hash every untracked file around each Bash call/m);
+
+  const leaky = legacyProject(t, { '.gitignore': 'dist/\n' });
+  assert.match(runInstall(leaky.root, 'init').stderr, /^warning: \.gitignore does not ignore node_modules\/; /m);
+
+  const fine = legacyProject(t, { '.gitignore': '/node_modules\n' });
+  assert.doesNotMatch(runInstall(fine.root, 'init').stderr, /gitignore/);
+});
+
+test('acceptance: init right after create-next-app exits 0, and so does the docs check of its copy', (t) => {
+  const { root } = tmpRepo(t, {
+    '.gitignore': '/node_modules\n/.next/\n.env*\n',
+    'AGENTS.md': '<!-- BEGIN:nextjs-agent-rules -->\n# This is NOT the Next.js you know\n<!-- END:nextjs-agent-rules -->\n',
+    'package.json': JSON.stringify({ name: 'app', scripts: { dev: 'next dev', build: 'next build' } }),
+    'README.md': '# app\n\nRun `npm run dev` and open `app/page.tsx`.\n',
+    'app/page.tsx': 'export default function Page() {\n  return null;\n}\n',
+  });
+  const run = runInstall(root, 'init');
+  assert.equal(run.status, 0, run.stderr);
+  assert.ok(read(root, 'CLAUDE.md').startsWith('@AGENTS.md\n'));
+  assert.doesNotMatch(run.stderr, /gitignore/);
+  assert.doesNotMatch(run.stdout, /docs problem/);
+  const check = runScript('docs-check', [], { cwd: root });
+  assert.equal(check.status, 0, check.stderr);
 });
 
 // In a session: K8 and an update under the copy's own hooks.

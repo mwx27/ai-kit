@@ -27,7 +27,7 @@ test('outside a hook nothing is written', (t) => {
   const { dir, root } = tmpRepo(t);
   asHook(undefined, () => logEvent(root, 'probe', { n: 1 }));
   assert.deepEqual(readdirSync(dir), ['repo']);
-  assert.deepEqual(readdirSync(root).sort(), ['.git', '.gitkeep']);
+  assert.deepEqual(readdirSync(root).sort(), ['.git', '.gitignore', '.gitkeep']);
 });
 
 test('docs-check and docs-grep run from a terminal write no event log', (t) => {
@@ -36,7 +36,7 @@ test('docs-check and docs-grep run from a terminal write no event log', (t) => {
   runScript('docs-check', [], { cwd: root });
   runScript('docs-grep', ['x'], { cwd: root });
   assert.deepEqual(readdirSync(dir), ['repo']);
-  assert.deepEqual(readdirSync(root).sort(), ['.claude', '.git', '.gitkeep', 'CLAUDE.md', 'package.json']);
+  assert.deepEqual(readdirSync(root).sort(), ['.claude', '.git', '.gitignore', '.gitkeep', 'CLAUDE.md', 'package.json']);
 });
 
 test('from a hook: one line in <logDir>/events.jsonl, the header fields first, then the metadata', (t) => {

@@ -160,12 +160,35 @@ test('a fragment found twice: exit 1, nothing written', (t) => {
   assert.equal(existsSync(path.join(root, '.claude')), false);
 });
 
-test('no CLAUDE.md: exit 1, nothing written', (t) => {
-  const { root } = tmpRepo(t);
+test('no CLAUDE.md: init creates it with a title and the fragments; update stops, as someone removed it', (t) => {
+  const { root } = tmpRepo(t, { '_docs/a.md': DATED_DOC });
   const run = init(root);
-  assert.equal(run.status, 1);
-  assert.equal(run.stderr, 'honest-docs-init: CLAUDE.md not found\nhonest-docs-init: nothing written\n');
-  assert.equal(existsSync(path.join(root, '.claude')), false);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /^created CLAUDE\.md$/m);
+  const text = read(root, 'CLAUDE.md');
+  assert.ok(text.startsWith(`# ${path.basename(root)}\n\n## honest-docs\n\n${fragment('read-line')}\n\n${fragment('docs-policy')}\n`), text);
+  assert.match(text, /^## Rules\n\n- \[`docs\.md`\]\(\.claude\/rules\/docs\.md\)/m);
+
+  rmSync(path.join(root, 'CLAUDE.md'));
+  const update = init(root);
+  assert.equal(update.status, 1);
+  assert.equal(update.stderr, 'honest-docs-update: CLAUDE.md not found\nhonest-docs-update: nothing written\n');
+});
+
+test('no CLAUDE.md beside an AGENTS.md: the new CLAUDE.md opens by importing it', (t) => {
+  const { root } = tmpRepo(t, { 'AGENTS.md': '# Agents\n', '_docs/a.md': DATED_DOC });
+  const run = init(root);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /^created CLAUDE\.md, importing AGENTS\.md so Claude Code still reads it$/m);
+  assert.ok(read(root, 'CLAUDE.md').startsWith('@AGENTS.md\n\n## honest-docs\n'));
+  assert.equal(read(root, 'AGENTS.md'), '# Agents\n');
+});
+
+test('an index.file elsewhere is created with a title, never an import', (t) => {
+  const { root } = tmpRepo(t, { 'AGENTS.md': '# Agents\n', '.claude/honest-docs.json': '{ "index": { "file": "_docs/INDEX.md" } }', '_docs/a.md': DATED_DOC });
+  assert.equal(init(root).status, 0);
+  assert.ok(read(root, '_docs/INDEX.md').startsWith(`# ${path.basename(root)}\n`));
+  assert.equal(existsSync(path.join(root, 'CLAUDE.md')), false);
 });
 
 test('init leaves a tree that docs-check passes on the init category', (t) => {
@@ -421,7 +444,7 @@ test('init that fails runs no docs check', (t) => {
 
 const missingDocsDir = (folders) =>
   `warning: docsDir "_docs" does not exist, so the docs check scans no docs there; ${folders} ` +
-  'Set docsDir in .claude/honest-docs.json, then run /honest-docs:init again.\n';
+  'Set docsDir in .claude/honest-docs.json, then run /honest-docs:update.\n';
 
 test('docsDir missing: a warning naming the folders that hold .md files, exit 0', (t) => {
   const { root } = tmpRepo(t, {
@@ -505,14 +528,14 @@ test('a negation in a core.excludesFile at an absolute path is not reported', (t
   assert.doesNotMatch(run.stderr, /honest-docs\.json/);
 });
 
-test('outside a git repo: no ignore check, no warning', (t) => {
+test('outside a git repo: init refuses and writes nothing', (t) => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'honest-docs-nogit-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  writeFiles(dir, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC, '.gitignore': '.claude/\n' });
+  writeFiles(dir, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC });
   const run = init(dir);
-  assert.equal(run.status, 0, run.stderr);
-  assert.equal(run.stderr, '');
-  assert.ok(existsSync(path.join(dir, '.claude/rules/docs.md')));
+  assert.equal(run.status, 1);
+  assert.equal(run.stderr, 'honest-docs-init: not a git repository: run git init here, then /honest-docs:init again\nhonest-docs-init: nothing written\n');
+  assert.equal(existsSync(path.join(dir, '.claude')), false);
 });
 
 test('a broken config: exit 2 with one line naming the file, nothing written', (t) => {
