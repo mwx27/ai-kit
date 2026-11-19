@@ -14,6 +14,9 @@
 //   the rest                what core/init.mjs plans: the rule, the CLAUDE.md fragments, the Rules
 //                           line, Last Updated lines; the config skeleton on init only
 //
+// init's --docs-dir sets docsDir in the config init creates: a folder inside the repo, never its
+// root. It is refused with update, where a config already exists, and when it is not such a folder.
+//
 // Refusals write nothing: init outside a git repository (attribution and the changed files need
 // git), init where a manifest exists, update where none does or where it names a
 // newer version than the plugin's, a settings.json that is not a JSON object, a fragment error
@@ -31,7 +34,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { CONFIG_FILE, COPY_DIR, STATE_ROOT, usesStateRoot } from './config.mjs';
+import { CONFIG_FILE, COPY_DIR, STATE_ROOT, loadConfig, usesStateRoot } from './config.mjs';
 import { ignoredByGit } from './git-ignored.mjs';
 import { DOCS_RULE, compareSemver, planInit, semver } from './init.mjs';
 import { PLUGIN_ROOT, pluginVersion } from './log.mjs';
@@ -158,6 +161,17 @@ function trackedUnder(root, dirs) {
   }
 }
 
+/**
+ * `dir` as a docsDir, repo-relative POSIX without a trailing slash, or null when it is not a folder
+ * inside the repo: absolute, above it, or the repo root itself, whose scan would cover everything.
+ */
+export function docsDirArg(dir) {
+  if (typeof dir !== 'string' || /^[A-Za-z]:/.test(dir)) return null;
+  const norm = path.posix.normalize(dir.replace(/\\/g, '/')).replace(/\/+$/, '');
+  if (norm === '' || norm === '.' || norm === '..' || norm.startsWith('../') || path.posix.isAbsolute(norm)) return null;
+  return norm;
+}
+
 /** Whether `root` is the top of a git work tree. */
 function isGitRoot(root) {
   try {
@@ -225,7 +239,7 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
  * and manifest of the new copy, `refusal` why nothing may be written, `conflicts` the hand-edited
  * copied files with their diffs.
  */
-export function planInstall(root, config, { mode, force = false }) {
+export function planInstall(root, config, { mode, force = false, docsDir }) {
   const version = pluginVersion();
   const plan = {
     mode,
@@ -261,6 +275,13 @@ export function planInstall(root, config, { mode, force = false }) {
   if (mode === 'init' && !isGitRoot(root)) {
     plan.refusal = 'not a git repository: run git init here, then /honest-docs:init again';
     return plan;
+  }
+  if (docsDir !== undefined) {
+    if (mode !== 'init') plan.refusal = `--docs-dir is for init only; docsDir is set in ${CONFIG_FILE}`;
+    else if (existsSync(path.join(root, CONFIG_FILE))) plan.refusal = `docsDir is set in ${CONFIG_FILE}; edit it there`;
+    else if (docsDirArg(docsDir) === null) plan.refusal = `--docs-dir ${JSON.stringify(docsDir)}: name a folder inside the repo, not its root`;
+    if (plan.refusal) return plan;
+    config = loadConfig(root, { docsDir: docsDirArg(docsDir) });
   }
   if (mode === 'init' && installed) {
     plan.refusal = `already installed (${manifest?.version ?? 'unreadable manifest'}): run /honest-docs:update`;
@@ -392,8 +413,8 @@ function swapCopy(root, copy, beforeSwap) {
  * Runs planInstall and, only without a refusal or an error, makes every write; then warns about each
  * file it maintains that git ignores, written this run or not.
  */
-export function runInstall(root, config, { mode, force = false, beforeSwap } = {}) {
-  const plan = planInstall(root, config, { mode, force });
+export function runInstall(root, config, { mode, force = false, docsDir, beforeSwap } = {}) {
+  const plan = planInstall(root, config, { mode, force, docsDir });
   if (plan.refusal || plan.errors.length > 0) return plan;
   for (const { file, text, mtime } of plan.writes) {
     mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
