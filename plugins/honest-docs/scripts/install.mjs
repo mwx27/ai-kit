@@ -2,8 +2,12 @@
 // /honest-docs:init and /honest-docs:update (core/install.mjs):
 //
 //   node install.mjs --mode init|update [--force] [--docs-dir <folder>]
+//   node install.mjs --check-empty
 //
 // --docs-dir, init only, sets docsDir in the config init creates (core/install.mjs).
+//
+// --check-empty, alone, writes nothing: it prints one JSON line, {"empty":bool,"blocking":[...]}
+// (core/empty-project.mjs), and exits 0. /honest-docs:init runs it first.
 //
 // Prints what it wrote, then `honest-docs-init: installed X` or `honest-docs-update: updated X → Y`
 // with the CHANGELOG sections in between, then `next:` lines for the agent and `warning:` lines
@@ -14,14 +18,26 @@
 // .claude/honest-docs.json or a bad command line.
 import path from 'node:path';
 import { CONFIG_FILE, COPY_DIR, ConfigError, loadConfig, projectRoot } from '../core/config.mjs';
+import { checkEmpty } from '../core/empty-project.mjs';
 import { PRETTIER_IGNORE, changelogBetween, runInstall } from '../core/install.mjs';
 import { runDocsCheck } from '../core/problems.mjs';
 import { SETTINGS_FILE } from '../core/settings-merge.mjs';
 
+const USAGE = 'usage: install.mjs --mode init|update [--force] [--docs-dir <folder>] | --check-empty';
+
+const args = process.argv.slice(2);
+if (args.includes('--check-empty')) {
+  if (args.length !== 1) {
+    console.error(USAGE);
+    process.exit(2);
+  }
+  console.log(JSON.stringify(checkEmpty(projectRoot())));
+  process.exit(0);
+}
+
 let mode = null;
 let force = false;
 let docsDir;
-const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--force') force = true;
   else if (args[i] === '--mode') mode = args[++i] ?? '';
@@ -29,7 +45,7 @@ for (let i = 0; i < args.length; i++) {
   else mode = '';
 }
 if (!['init', 'update'].includes(mode)) {
-  console.error('usage: install.mjs --mode init|update [--force] [--docs-dir <folder>]');
+  console.error(USAGE);
   process.exit(2);
 }
 const tag = `honest-docs-${mode}`;
