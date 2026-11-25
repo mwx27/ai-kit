@@ -47,8 +47,10 @@ the user picked one, with the Bash tool and show its output verbatim.
 
 It copies the hooks and the docs check into `.claude/honest-docs/`, adds the hooks to
 `.claude/settings.json`, writes `.claude/rules/docs.md`, the `CLAUDE.md` passages and a starter
-`.claude/honest-docs.json`. Every step left to you is a `next:` line: carry out each one. A
-`warning:` line is for the user to decide on; do not change the config or `.gitignore` on your own.
+`.claude/honest-docs.json`. Every step left to you is a `next:` line: carry out each one in the
+order [`commit.md`](${CLAUDE_PLUGIN_ROOT}/references/commit.md) gives, suggesting the commits it
+describes. A `warning:` line is for the user to decide on; do not change the config or `.gitignore`
+on your own.
 
 If it exits non-zero, it wrote nothing. Show the user what it reports (a diff, a passage you take to
 be the fragment it names) and ask with `AskUserQuestion` what to do. Rerun with `--force` only when

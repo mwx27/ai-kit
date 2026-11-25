@@ -47,7 +47,7 @@ The checks are installed into the project and committed with it, so they run for
 
 4. Run `/honest-docs:init`. It first asks which folder holds the docs about your code; [`references/docs-folder.md`](plugins/honest-docs/references/docs-folder.md) explains the choice and how to move the docs later. It then copies the checks into `.claude/honest-docs/`, adds their hooks to `.claude/settings.json`, writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md` (creating it if there is none; beside an `AGENTS.md` it starts with `@AGENTS.md`, so Claude Code keeps reading that file), adds a Last Updated line to each doc that has none, and lists every file it wrote. It ends by saying how many docs problems the check finds; they do not block, but are worth fixing. The checks keep their working files in `.claude/honest-docs-state/`, which git ignores without an entry in your `.gitignore`.
 
-5. Commit what it wrote: `.claude/honest-docs/`, `.claude/settings.json` and the rest of its list.
+5. Commit what it wrote: `.claude/honest-docs/`, `.claude/settings.json` and the rest of its list. init ends by suggesting the commit, in the style of your repo's history; it never commits on its own.
 
 After a plugin update, the next session opens with a notice to run `/honest-docs:update`; run it and commit again. A teammate needs no setup beyond pulling: the checks run from the repo. The plugin adds the notice and the `/honest-docs:` commands.
 
