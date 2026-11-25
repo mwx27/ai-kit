@@ -7,7 +7,7 @@ argument-hint: '[now]'
 
 # honest-docs init
 
-Unless the arguments are `now` (they are: "$ARGUMENTS"), first run
+Unless the arguments are `now` (they are: "$ARGUMENTS") or `.claude/honest-docs.json` exists, first run
 `node "${CLAUDE_PLUGIN_ROOT}/scripts/install.mjs" --check-empty`. It prints
 `{"empty":bool,"blocking":[...]}`. When `empty` is true, ask with `AskUserQuestion`: "This project
 has no code yet. Will you generate the app with a tool like create-next-app or create-expo-app?"
