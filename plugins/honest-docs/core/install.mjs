@@ -343,6 +343,7 @@ export function planInstall(root, config, { mode, force = false, docsDir }) {
   plan.writes = init.writes.filter((w) => mode === 'init' || w.file !== CONFIG_FILE);
   plan.notes.push(...init.notes);
   plan.warnings.push(...init.warnings);
+  plan.nexts.push(...init.nexts);
 
   plan.warnings.push(...gitignoreWarnings(root), ...stateWarnings(root, config));
 

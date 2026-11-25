@@ -435,6 +435,40 @@ test('init ends with the number of problems docs-check reports, and still exits 
   assert.equal(run.nexts.at(-1), PROBLEMS(2));
 });
 
+// An older docs policy of the project's own, in words no fragment version has.
+
+const OLDER = (line) => `CLAUDE.md:${line} looks like an older docs policy; replace it with a pointer to the new passage`;
+
+test('a paragraph outside the policy that says made false gets a next: line with its line, and stays', (t) => {
+  const own = '# Project\n\nIntro.\n\nDocs rule: after a change, fix every doc\nit made false before you stop.\n';
+  const { root } = tmpRepo(t, { 'CLAUDE.md': own });
+  const run = init(root);
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(run.nexts.filter((n) => /older docs policy/.test(n)), [OLDER(5)]);
+  assert.ok(read(root, 'CLAUDE.md').startsWith(own));
+  // The next run, an update, still names it: it is still there.
+  assert.deepEqual(init(root).nexts.filter((n) => /older docs policy/.test(n)), [OLDER(5)]);
+});
+
+test('with several blank lines before it, the paragraph is named by its first line of text', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': '# Project\n\n\n\nFix every doc a change made false.\n\n\n' });
+  assert.deepEqual(init(root).nexts.filter((n) => /older docs policy/.test(n)), [OLDER(5)]);
+});
+
+test('no such paragraph: no next: line, though the policy init writes says made false', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC });
+  assert.deepEqual(init(root).nexts.filter((n) => /older docs policy/.test(n)), []);
+  const { root: fresh } = tmpRepo(t, { 'CLAUDE.md': '# Project\n\nIntro.\n' });
+  assert.deepEqual(init(fresh).nexts.filter((n) => /older docs policy/.test(n)), []);
+});
+
+test('a known older version of the policy is replaced, not named', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': before() });
+  const run = init(root);
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(run.nexts.filter((n) => /older docs policy/.test(n)), []);
+});
+
 test('init that fails runs no docs check', (t) => {
   const text = `# Project\n\n${fragment('read-line')}\n\n${fragment('read-line')}\n`;
   const { root } = tmpRepo(t, { 'CLAUDE.md': text });

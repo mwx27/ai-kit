@@ -41,6 +41,10 @@
 // AGENTS.md only where no CLAUDE.md exists, and the import is the form its memory docs give for
 // keeping both; any other gets a title, the project folder's name.
 //
+// A paragraph of index.file outside the docs-policy fragment that says "made false" looks like an
+// older policy of the project's own, in words init does not know: it gets a `next:` line naming its
+// line, and is left as it is, since only the user can tell whether it is a duplicate.
+//
 // Two things init warns about and does not stop for: a docsDir the config names that does not exist,
 // naming the folders that do hold .md files; and a file it maintains that git ignores, which nobody
 // else gets. A docsDir that comes with the config this run writes gets a note instead: it is new.
@@ -307,7 +311,7 @@ export function planInit(root, config, { mode = 'init' } = {}) {
     notes.push(`created ${indexFile}${created.imports ? `, importing ${posixPath(created.imports)} so Claude Code still reads it` : ''}`);
   } else {
     errors.push(`${indexFile} not found`);
-    return { writes, notes, warnings, errors };
+    return { writes, notes, warnings, errors, nexts: [] };
   }
   const missing = [];
   for (const name of FRAGMENTS) {
@@ -343,7 +347,29 @@ export function planInit(root, config, { mode = 'init' } = {}) {
   if (listed.note) notes.push(listed.note);
   text = listed.text;
   if (text !== original) writes.push({ file: indexFile, text });
-  return { writes, notes, warnings, errors };
+  const nexts = olderPolicies(text).map(
+    (line) => `${indexFile}:${line} looks like an older docs policy; replace it with a pointer to the new passage`
+  );
+  return { writes, notes, warnings, errors, nexts };
+}
+
+/**
+ * The line numbers of the paragraphs in `text` outside the current docs-policy fragment that say
+ * "made false", the words the policy turns on: an older policy of the project's, in words no
+ * version of the fragment has.
+ */
+function olderPolicies(crlfText) {
+  const text = crlfText.replace(/\r\n/g, '\n');
+  const policy = findFragment(text, fragmentVersions('docs-policy'));
+  const lines = [];
+  for (const m of text.matchAll(/(?:^|\n\n)((?:[^\n]|\n(?!\s*\n))+)/g)) {
+    // With more than one blank line between paragraphs the capture opens with the extra ones.
+    const start = m.index + m[0].length - m[1].length + m[1].match(/^\s*/)[0].length;
+    const end = m.index + m[0].length;
+    if (!/made\s+false/i.test(m[1]) || policy.some((f) => f.start < end && f.end > start)) continue;
+    lines.push(text.slice(0, start).split('\n').length);
+  }
+  return lines;
 }
 
 /**
