@@ -9,8 +9,9 @@ disable-model-invocation: true
 Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/install.mjs" --mode update` with the Bash tool and show its
 output verbatim, the CHANGELOG sections included.
 
-Every step left to you is a `next:` line: carry out each one. A `warning:` line is for the user to
-decide on.
+Every step left to you is a `next:` line: carry out each one in the order
+[`commit.md`](${CLAUDE_PLUGIN_ROOT}/references/commit.md) gives, suggesting the commits it
+describes. A `warning:` line is for the user to decide on.
 
 If it exits non-zero, it wrote nothing. Show the user what it reports (a diff of files changed by
 hand in `.claude/honest-docs/`, a passage you take to be the fragment it names) and ask with
