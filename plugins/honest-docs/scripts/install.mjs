@@ -2,14 +2,15 @@
 // /honest-docs:init and /honest-docs:update (core/install.mjs):
 //
 //   node install.mjs --mode init|update [--force] [--docs-dir <folder>]
-//   node install.mjs --check-empty
+//   node install.mjs --preflight
 //
 // --docs-dir, init only, sets docsDir in the config init creates (core/install.mjs).
 //
-// --check-empty, alone, writes nothing: it prints one JSON line, {"empty":bool,"blocking":[...]}
-// (core/empty-project.mjs), and exits 0. /honest-docs:init runs it first. It judges the repository
-// holding the current folder, or outside a repository the current folder itself, with the same
-// output; init then refuses for want of git.
+// --preflight, alone, writes nothing: it prints one JSON line,
+// {"empty":bool,"blocking":[...],"ignored":[{file,source,pattern}...]} (core/preflight.mjs), and
+// exits 0; 2 on a broken .claude/honest-docs.json, as below. /honest-docs:init runs it first. It
+// judges the repository holding the current folder, or outside a repository the current folder
+// itself, with the same output and `ignored` empty; init then refuses for want of git.
 //
 // Prints what it wrote, then `honest-docs-init: installed X` or `honest-docs-update: updated X → Y`
 // with the CHANGELOG sections in between, then `next:` lines for the agent and `warning:` lines
@@ -20,20 +21,27 @@
 // .claude/honest-docs.json or a bad command line.
 import path from 'node:path';
 import { CONFIG_FILE, COPY_DIR, ConfigError, loadConfig, projectRoot } from '../core/config.mjs';
-import { checkEmpty } from '../core/empty-project.mjs';
 import { PRETTIER_IGNORE, changelogBetween, runInstall } from '../core/install.mjs';
+import { preflight } from '../core/preflight.mjs';
 import { runDocsCheck } from '../core/problems.mjs';
 import { SETTINGS_FILE } from '../core/settings-merge.mjs';
 
-const USAGE = 'usage: install.mjs --mode init|update [--force] [--docs-dir <folder>] | --check-empty';
+const USAGE = 'usage: install.mjs --mode init|update [--force] [--docs-dir <folder>] | --preflight';
 
 const args = process.argv.slice(2);
-if (args.includes('--check-empty')) {
+if (args.includes('--preflight')) {
   if (args.length !== 1) {
     console.error(USAGE);
     process.exit(2);
   }
-  console.log(JSON.stringify(checkEmpty(projectRoot())));
+  const root = projectRoot();
+  try {
+    console.log(JSON.stringify(preflight(root, loadConfig(root))));
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    console.error(`honest-docs-preflight: ${error.message}`);
+    process.exit(2);
+  }
   process.exit(0);
 }
 

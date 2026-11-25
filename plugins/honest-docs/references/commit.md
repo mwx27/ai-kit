@@ -10,6 +10,11 @@ telling the user what differs. Then suggest the install commit: every file the s
 writing, `.claude/honest-docs/` included, and every file you changed carrying out those lines. List
 the paths.
 
+When the script warned that git ignores files it wrote, tell the user first that without a change to
+`.gitignore` honest-docs works only on this machine: nobody else gets the checks. Do not change
+`.gitignore` on your own. Do not suggest the commit while git ignores honest-docs' files; point to the
+warning, which says how to let them in.
+
 Leave the docs problems for after it is committed, though the `next:` line names them now. A file
 both the install and a fix change, such as `CLAUDE.md`, then needs no partial staging.
 

@@ -539,11 +539,88 @@ test('a file init writes is gitignored: one warning per file, exit 0, still writ
     run.stderr,
     ['.claude/rules/docs.md', '.claude/honest-docs.json', '.claude/settings.json', '.claude/honest-docs/manifest.json']
       .map((file) => `warning: ${file} is ignored by git (.gitignore:2:.claude/), so it will not be committed and nobody else gets it.\n`)
-      .join('')
+      .join('') +
+      'warning: .claude/ is excluded as a whole (.gitignore:2:.claude/); git never looks inside an excluded folder, ' +
+      'so a "!.claude/…" line cannot bring back the files above. Ignore only the local files instead ' +
+      '(.claude/settings.local.json and anything else that stays on this machine), or put ".claude/*" in place of that line, ' +
+      'followed by "!.claude/honest-docs.json", "!.claude/honest-docs/", "!.claude/rules/", "!.claude/settings.json".\n'
   );
   assert.ok(existsSync(path.join(root, '.claude/rules/docs.md')));
   // A second run writes nothing and still warns: the files are still not committed.
   assert.match(init(root).stderr, /docs\.md is ignored by git/);
+});
+
+test('the exceptions the folder warning gives do bring every file back', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC, '.gitignore': '.claude/\n' });
+  const line = init(root).stderr.split('\n').find((l) => l.includes('excluded as a whole'));
+  const exceptions = [...line.matchAll(/"(![^"]+)"/g)].map((m) => m[1]);
+  writeFiles(root, { '.gitignore': ['.claude/*', ...exceptions].join('\n') + '\n' });
+  // The second run is an update, which warns again about any file still ignored.
+  assert.equal(init(root).stderr, '');
+});
+
+test('.claude/** is a folder excluded as a whole, and the exceptions it gets bring every file back', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC, '.gitignore': '.claude/**\n' });
+  const lines = init(root).stderr.split('\n');
+  const folder = lines.filter((l) => l.includes(' is excluded'));
+  assert.deepEqual(folder, [
+    'warning: .claude/ is excluded as a whole (.gitignore:1:.claude/**); git never looks inside an excluded folder, ' +
+      'so a "!.claude/…" line cannot bring back the files above. Ignore only the local files instead ' +
+      '(.claude/settings.local.json and anything else that stays on this machine), or put ".claude/*" in place of that line, ' +
+      'followed by "!.claude/honest-docs.json", "!.claude/honest-docs/", "!.claude/rules/", "!.claude/settings.json".',
+  ]);
+  const exceptions = [...folder[0].matchAll(/"(![^"]+)"/g)].map((m) => m[1]);
+  writeFiles(root, { '.gitignore': ['.claude/*', ...exceptions].join('\n') + '\n' });
+  assert.equal(init(root).stderr, '');
+});
+
+test('a folder excluded by a file outside the repo: the lines the warning gives, in the repo .gitignore, let it in', (t) => {
+  const { dir, root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC });
+  const excludes = path.join(dir, 'gitignore_global');
+  writeFileSync(excludes, '.claude/\n');
+  git(root, 'config', 'core.excludesFile', excludes);
+  const folder = init(root).stderr.split('\n').filter((l) => l.includes(' is excluded'));
+  assert.equal(folder.length, 1);
+  assert.match(
+    folder[0],
+    /^warning: \.claude\/ is excluded \(.+gitignore_global:1:\.claude\/\), by a file outside the repo; git never looks inside an excluded folder, so a "!\.claude\/…" line cannot bring back the files above\. Add "!\.claude\/" and "!\.claude\/\*\*" to the repo's \.gitignore, which takes precedence, followed by entries for what stays on this machine\.$/
+  );
+  writeFiles(root, { '.gitignore': 'node_modules/\n!.claude/\n!.claude/**\n.claude/settings.local.json\n' });
+  assert.equal(init(root).stderr, '');
+});
+
+test('.git/info/exclude is outside the repo too, whatever its pattern', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC });
+  writeFiles(root, { '.git/info/exclude': '.claude/**\n' });
+  const folder = init(root).stderr.split('\n').filter((l) => l.includes(' is excluded'));
+  assert.deepEqual(folder.map((l) => l.match(/^warning: (\S+) is excluded \((\S+)\), by a file outside the repo; /)?.slice(1)), [
+    ['.claude/', '.git/info/exclude:1:.claude/**'],
+  ]);
+  writeFiles(root, { '.gitignore': 'node_modules/\n!.claude/\n!.claude/**\n' });
+  assert.equal(init(root).stderr, '');
+});
+
+test('a folder a wildcard excludes gets its own "!" line, not a rewrite of the pattern', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC });
+  writeFiles(root, { '.gitignore': '.claude/*\n!.claude/honest-docs.json\n!.claude/settings.json\n!.claude/honest-docs/\n' });
+  const run = init(root);
+  assert.equal(run.status, 0);
+  assert.equal(
+    run.stderr,
+    'warning: .claude/rules/docs.md is ignored by git (.gitignore:1:.claude/*), so it will not be committed and nobody else gets it.\n' +
+      'warning: .claude/rules/ is excluded (.gitignore:1:.claude/*); git never looks inside an excluded folder, ' +
+      'so a "!.claude/rules/…" line cannot bring back the files above. Add "!.claude/rules/" after that line.\n'
+  );
+});
+
+test('a file ignored by its own pattern, in a folder git does not exclude, gets no folder warning', (t) => {
+  const { root } = tmpRepo(t, { 'CLAUDE.md': after(), '_docs/a.md': DATED_DOC });
+  writeFiles(root, { '.gitignore': '.claude/settings.json\n' });
+  const run = init(root);
+  assert.equal(
+    run.stderr,
+    'warning: .claude/settings.json is ignored by git (.gitignore:1:.claude/settings.json), so it will not be committed and nobody else gets it.\n'
+  );
 });
 
 test('a tracked file matching an ignore pattern, or one a negation re-includes, is not reported', (t) => {

@@ -4,7 +4,9 @@
 import { execFileSync } from 'node:child_process';
 
 /**
- * The files among `files` git ignores, `{ file, source }` with source `<file>:<line>:<pattern>`.
+ * The files among `files` git ignores, `{ file, source, pattern, from }` with source
+ * `<file>:<line>:<pattern>` and `from` that file, as git names it: repo-relative, or absolute for a
+ * `core.excludesFile`.
  * Empty without git or outside a repo. A tracked file is never reported: git commits it anyway.
  * A path outside the repo fails the whole call, so the caller leaves those out.
  */
@@ -29,7 +31,7 @@ export function ignoredByGit(root, files) {
   for (let i = 0; i + 3 < fields.length; i += 4) {
     const [source, line, pattern, file] = fields.slice(i, i + 4);
     // With -v a negated pattern that matched is printed too, though the file is not ignored.
-    if (!pattern.startsWith('!')) ignored.push({ file, source: `${source}:${line}:${pattern}` });
+    if (!pattern.startsWith('!')) ignored.push({ file, source: `${source}:${line}:${pattern}`, pattern, from: source });
   }
   return ignored;
 }

@@ -7,18 +7,10 @@ argument-hint: '[now]'
 
 # honest-docs init
 
-Unless the arguments are `now` (they are: "$ARGUMENTS") or `.claude/honest-docs.json` exists, first run
-`node "${CLAUDE_PLUGIN_ROOT}/scripts/install.mjs" --check-empty`. It prints
-`{"empty":bool,"blocking":[...]}`. When `empty` is true, ask with `AskUserQuestion`: "This project
-has no code yet. Will you generate the app with a tool like create-next-app or create-expo-app?"
-
-- Generate the app first (Recommended): write nothing. Tell the user to generate the app, commit
-  it, then run `/honest-docs:init` again. When `blocking` lists entries, name them: "the generator
-  may refuse to run because of these files; move them out of the folder for a moment."
-- Install now: for a project no generator starts (scripts, docs only, code written by hand). Go on.
-
-Without `AskUserQuestion`, stop there, writing nothing, and give both ways: generate the app (naming
-`blocking` as above) and run init again, or run `/honest-docs:init now` to install anyway.
+Unless `.claude/honest-docs.json` exists, first run
+`node "${CLAUDE_PLUGIN_ROOT}/scripts/install.mjs" --preflight` and settle what it reports as
+[`preflight.md`](${CLAUDE_PLUGIN_ROOT}/references/preflight.md) says, ignored files by
+[`gitignore.md`](${CLAUDE_PLUGIN_ROOT}/references/gitignore.md). The arguments are: "$ARGUMENTS".
 
 When the project has no `.claude/honest-docs.json`, then ask with `AskUserQuestion`: "Which folder
 should hold the docs about this project's code? honest-docs checks that the docs there stay true to
