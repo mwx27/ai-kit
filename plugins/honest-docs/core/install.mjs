@@ -24,7 +24,9 @@
 // Warnings, which stop nothing: no .gitignore, or one that leaves node_modules/ in a project with a
 // package.json — the Bash hooks hash every untracked file and would time out; files git tracks in
 // stateDir or logDir; a stateDir or logDir outside
-// STATE_ROOT that git does not ignore; the state and logs of earlier versions, which nothing reads now.
+// STATE_ROOT that git does not ignore; the state and logs of earlier versions, which nothing reads now;
+// after the writes, each file it maintains that git ignores, and for one inside a folder git excludes,
+// how to let that folder in.
 // Update at the plugin's own version is a repair: it copies and merges again.
 //
 // The project's files are written first and the copy last: it is staged beside the old one,
@@ -43,6 +45,13 @@ import { makeDir } from './state-dir.mjs';
 import { MANIFEST } from './version.mjs';
 
 export const PRETTIER_IGNORE = '.prettierignore';
+
+/**
+ * The files install writes and keeps, which have to reach the repo for anyone else to get the
+ * checks; the copy stands for itself by its manifest. scripts/install.mjs --preflight asks git about
+ * them before init, and install warns about any git ignores after it.
+ */
+export const maintainedFiles = (config) => [DOCS_RULE, CONFIG_FILE, config.index.file, SETTINGS_FILE, `${COPY_DIR}/${MANIFEST}`];
 
 /** sha256 of a copied file as the manifest records it: line endings do not count. */
 export const fileHash = (text) => createHash('sha256').update(text.replace(/\r\n/g, '\n')).digest('hex');
@@ -429,10 +438,67 @@ export function runInstall(root, config, { mode, force = false, docsDir, beforeS
   if (usesStateRoot(config)) makeDir(path.join(root, STATE_ROOT));
   swapCopy(root, plan.copy, beforeSwap);
 
-  const maintained = [DOCS_RULE, CONFIG_FILE, config.index.file, SETTINGS_FILE, `${COPY_DIR}/${MANIFEST}`].filter((file) =>
-    existsSync(path.join(root, file))
-  );
-  for (const { file, source } of ignoredByGit(root, maintained))
+  const maintained = maintainedFiles(config).filter((file) => existsSync(path.join(root, file)));
+  const ignored = ignoredByGit(root, maintained);
+  for (const { file, source } of ignored)
     plan.warnings.push(`${file} is ignored by git (${source}), so it will not be committed and nobody else gets it.`);
+  plan.warnings.push(...excludedFolderWarnings(root, ignored));
   return plan;
+}
+
+/**
+ * One warning per excluded folder holding an ignored file. Git never looks inside an excluded
+ * folder, so a "!" line naming a file in it changes nothing; the folder itself has to be let in.
+ * A folder a pattern names (`.claude/`), or one whose every level a pattern ignores (`.claude/**`), is
+ * to be ignored by its contents instead (`.claude/*`) with exceptions; one a wildcard of its parent
+ * excludes (`.claude/*` → `.claude/rules`) needs `!<dir>/`. A line outside the repo's .gitignore
+ * files (`core.excludesFile`, `.git/info/exclude`) is the user's own: the repo's .gitignore takes
+ * precedence over it, so "!<dir>/" and "!<dir>/**" there let the folder in, whatever that line is.
+ */
+function excludedFolderWarnings(root, ignored) {
+  const ancestors = (file) => file.split('/').slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join('/'));
+  const excluded = new Map(
+    ignoredByGit(root, [...new Set(ignored.flatMap(({ file }) => ancestors(file)))]).map((dir) => [dir.file, dir])
+  );
+  // folder → { source, whole, outside, names }: `whole` when the line has to give way to "<dir>/*",
+  // `outside` when it is in a file the repo does not hold.
+  const folders = new Map();
+  const outsideRepo = (from) => path.isAbsolute(from) || from.startsWith('.git/');
+  const add = (dir, file, { source, whole, from }) => {
+    const [first, ...rest] = file.slice(dir.length + 1).split('/');
+    const entry = folders.get(dir) ?? { source, whole, outside: outsideRepo(from), names: new Set() };
+    entry.names.add(rest.length > 0 ? `${first}/` : first);
+    folders.set(dir, entry);
+  };
+  for (const { file, source, pattern, from } of ignored) {
+    // "<dir>/**" ignores everything below <dir> at any depth, so a "!" line for a subfolder does not
+    // bring back the files in it: the line has to give way, as for "<dir>/".
+    if (pattern.endsWith('/**')) {
+      const base = pattern.slice(0, -3).replace(/^\//, '').replace(/^\*\*\//, '');
+      const dir = ancestors(file).find((a) => a === base || a.endsWith(`/${base}`));
+      if (dir) {
+        add(dir, file, { source, whole: true, from });
+        continue;
+      }
+    }
+    const top = ancestors(file).find((dir) => excluded.has(dir));
+    if (!top) continue;
+    const { source: dirSource, pattern: dirPattern, from: dirFrom } = excluded.get(top);
+    add(top, file, { source: dirSource, whole: !/\*$/.test(dirPattern.replace(/\/$/, '')), from: dirFrom });
+  }
+  return [...folders].map(([dir, { source, whole, outside, names }]) => {
+    const why = `git never looks inside an excluded folder, so a "!${dir}/…" line cannot bring back the files above`;
+    if (outside)
+      return (
+        `${dir}/ is excluded (${source}), by a file outside the repo; ${why}. Add "!${dir}/" and "!${dir}/**" ` +
+        "to the repo's .gitignore, which takes precedence, followed by entries for what stays on this machine."
+      );
+    if (!whole) return `${dir}/ is excluded (${source}); ${why}. Add "!${dir}/" after that line.`;
+    const local =
+      dir === '.claude'
+        ? 'Ignore only the local files instead (.claude/settings.local.json and anything else that stays on this machine)'
+        : 'Ignore only the files in it that should stay local instead';
+    const exceptions = [...names].sort().map((name) => `"!${dir}/${name}"`).join(', ');
+    return `${dir}/ is excluded as a whole (${source}); ${why}. ${local}, or put "${dir}/*" in place of that line, followed by ${exceptions}.`;
+  });
 }
