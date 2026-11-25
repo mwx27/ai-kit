@@ -70,6 +70,24 @@ test('CLAUDE.md is no code, but both generators would refuse it', (t) => {
   assert.deepEqual(result(project(t, { 'CLAUDE.md': '# x\n' })), { empty: true, blocking: ['CLAUDE.md'] });
 });
 
+test('LICENCE, the British spelling, is no code', (t) => {
+  assert.deepEqual(result(project(t, { LICENCE: 'MIT\n' })), { empty: true, blocking: ['LICENCE'] });
+});
+
+test('a file that only starts like a licence or a readme is code', (t) => {
+  assert.equal(result(project(t, { 'licenseServer.js': 'export {};\n' })).empty, false);
+  assert.equal(result(project(t, { 'readme-generator.ts': 'export {};\n' })).empty, false);
+});
+
+test('outside a git repository --check-empty judges the current folder and prints the same JSON', (t) => {
+  const dir = realpathSync.native(mkdtempSync(path.join(os.tmpdir(), 'honest-docs-test-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFiles(dir, { 'README.md': '# x\n' });
+  assert.deepEqual(result(dir), { empty: true, blocking: ['README.md'] });
+  writeFiles(dir, { 'index.js': '\n' });
+  assert.deepEqual(result(dir), { empty: false, blocking: ['README.md', 'index.js'] });
+});
+
 test('files both generators tolerate are neither code nor blocking', (t) => {
   const root = project(t, { '.gitignore': '', LICENSE: '', 'docs/a.md': '', '.idea/x': '', 'app.iml': '' });
   assert.deepEqual(result(root), { empty: true, blocking: [] });

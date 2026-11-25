@@ -28,8 +28,8 @@ const EXPO = new Set([
 // Both generators also tolerate any *.iml (IntelliJ module files).
 const tolerated = (set, name) => set.has(name) || /\.iml$/.test(name);
 
-/** Not code, though a generator may refuse it. */
-const notCode = (name) => /^(readme|license)/i.test(name) || name === 'CLAUDE.md' || name === '.claude';
+/** Not code, though a generator may refuse it: a README or LICENSE/LICENCE, with an extension or none. */
+const notCode = (name) => /^(readme|licen[cs]e)(\.[\w.-]+)?$/i.test(name) || name === 'CLAUDE.md' || name === '.claude';
 
 /** `{ empty, blocking }` for the folder `root`; `blocking` sorted. */
 export function checkEmpty(root) {

@@ -7,7 +7,9 @@
 // --docs-dir, init only, sets docsDir in the config init creates (core/install.mjs).
 //
 // --check-empty, alone, writes nothing: it prints one JSON line, {"empty":bool,"blocking":[...]}
-// (core/empty-project.mjs), and exits 0. /honest-docs:init runs it first.
+// (core/empty-project.mjs), and exits 0. /honest-docs:init runs it first. It judges the repository
+// holding the current folder, or outside a repository the current folder itself, with the same
+// output; init then refuses for want of git.
 //
 // Prints what it wrote, then `honest-docs-init: installed X` or `honest-docs-update: updated X → Y`
 // with the CHANGELOG sections in between, then `next:` lines for the agent and `warning:` lines
