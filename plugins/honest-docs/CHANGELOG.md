@@ -6,6 +6,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and th
 
 ---
 
+## [0.2.2] — 2026-11-25
+
+### Added
+
+- **`/honest-docs:init` asks whether to generate the app first in a project with no code yet.** App generators such as `create-next-app` and `create-expo-app` refuse a folder that holds files they do not expect, `CLAUDE.md` among them, so installing first would block them. Init now asks before writing anything; when you choose to generate the app first, it stops without writing and names the files that may make a generator refuse. A README, a licence, repository and editor settings (`.github/`, `.editorconfig`, `.nvmrc` and the like), `AGENTS.md` and Claude's own files do not count as code. Choosing to install anyway, or running `/honest-docs:init now`, goes on as before.
+- **`/honest-docs:init` makes sure git will commit everything it writes, `CLAUDE.md` included.** When `.gitignore` would keep any of it out, init stops before writing and offers to change it: it asks what else in the ignored folder stays on this machine, proposes entries for just those instead of ignoring the whole folder, and offers to move personal entries of `.claude/settings.json` to `.claude/settings.local.json`. Nothing is written until git sees it all, or you cancel.
+- **`/honest-docs:init` and `/honest-docs:update` end by suggesting the commit**, written like the commits already in the repo, or as two choices when the history shows no style yet. The install comes first; fixes to the docs problems it reports, and to text the install made untrue, go into a commit of their own. Nothing is staged or committed for you, and no commit is suggested while git ignores honest-docs' files.
+- **An older docs policy of your own in `CLAUDE.md` is pointed out.** A paragraph that speaks of what a change made false, outside the passage init writes, is named with its line, and the agent offers to replace it with a pointer to the new passage. Nothing changes on its own, and you may keep it.
+
+### Changed
+
+- **The warning about a file git ignores explains a folder ignored as a whole.** A `!` line for a file inside an excluded folder does nothing, so init and update now say which lines let the folder's honest-docs files back in, for example after `.claude/` or `.claude/**` was added to `.gitignore` once the checks were installed. When the line is in a file outside the repo, your global excludes file or `.git/info/exclude`, it says what to add to the repo's `.gitignore` instead, which takes precedence.
+- **The step after the docs problems tells the agent how to keep a name on purpose.** A script a doc names deliberately, such as a rejected alternative, goes into `absentScripts` in `.claude/honest-docs.json`, and a path missing on purpose into `absentByDesign`, instead of the sentence being rewritten.
+
+---
+
 ## [0.2.1] — 2026-11-19
 
 ### Changed
