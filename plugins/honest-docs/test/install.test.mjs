@@ -32,7 +32,7 @@ const STATE = '.claude/honest-docs-state';
 const SETTINGS = '.claude/settings.json';
 const DATED = '**Last Updated:** 2026-01-15 10:30 CET';
 const GOOD_DOC = `# Doc\n\n${DATED}\n\nText.\n`;
-const PROBLEMS = (n) => `next: ${n} docs problem${n === 1 ? '' : 's'} in this repo (not blocking); propose fixes and wait for the user's consent`;
+const PROBLEMS = (n) => `next: ${n} docs problem${n === 1 ? '' : 's'} in this repo (not blocking); propose fixes and wait for the user's consent; a script a doc names on purpose (such as a rejected alternative) goes into absentScripts in .claude/honest-docs.json, and a path missing on purpose into absentByDesign, instead of rewriting the sentence`;
 
 /** The template's settings.json before the move: foreign hooks and keys honest-docs must keep. */
 const FOREIGN = {
