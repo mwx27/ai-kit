@@ -102,7 +102,9 @@ if (docs.error) plan.warnings.push(`the docs check of the new copy could not run
 else if (docs.problems.length > 0)
   nexts.push(
     `${docs.problems.length} docs problem${docs.problems.length === 1 ? '' : 's'} in this repo (not blocking); ` +
-      "propose fixes and wait for the user's consent"
+      "propose fixes and wait for the user's consent; a script a doc names on purpose (such as a rejected " +
+      `alternative) goes into absentScripts in ${CONFIG_FILE}, and a path missing on purpose into absentByDesign, ` +
+      'instead of rewriting the sentence'
   );
 for (const n of nexts) console.log(`next: ${n}`);
 for (const w of plan.warnings) console.error(`warning: ${w}`);

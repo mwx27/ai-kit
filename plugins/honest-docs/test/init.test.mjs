@@ -419,7 +419,7 @@ test('a doc without an H1 is left alone, with a warning naming it', (t) => {
 
 // K3: install ends with what the new copy's docs-check reports, whatever it reports exiting 0.
 
-const PROBLEMS = (n) => `${n} docs problem${n === 1 ? '' : 's'} in this repo (not blocking); propose fixes and wait for the user's consent`;
+const PROBLEMS = (n) => `${n} docs problem${n === 1 ? '' : 's'} in this repo (not blocking); propose fixes and wait for the user's consent; a script a doc names on purpose (such as a rejected alternative) goes into absentScripts in .claude/honest-docs.json, and a path missing on purpose into absentByDesign, instead of rewriting the sentence`;
 
 test('init with no docs problems says nothing about them', (t) => {
   const { root } = tmpRepo(t, { 'CLAUDE.md': after(), 'package.json': '{}', '_docs/a.md': DATED_DOC });
