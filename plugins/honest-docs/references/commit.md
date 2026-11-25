@@ -25,7 +25,9 @@ says, for:
 
 - the docs problems the script counted;
 - text the install made untrue, such as a doc or a script in the project describing an older way to
-  run the docs check.
+  run the docs check;
+- an older docs policy of the project's own that a `next:` line names in the index file. The user
+  may keep it: then leave the paragraph as it is.
 
 When you made any, suggest a commit of their own, so the install stays one change to review and to
 revert.
