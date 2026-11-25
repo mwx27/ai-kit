@@ -43,7 +43,7 @@ The checks are installed into the project and committed with it, so they run for
 
    If your install turned it on for every project, set the same entry to `false` in `~/.claude/settings.json`; the project's setting wins.
 
-3. Prepare the project. It must be a git repository. In a new project, generate the app first (`create-next-app`, `create-expo-app`…) and commit it: those tools refuse a folder that already holds a `CLAUDE.md`.
+3. Prepare the project. It must be a git repository. In a new project, generate the app first (`create-next-app`, `create-expo-app`…) and commit it: those tools refuse a folder that already holds what init writes. In a project with no code yet, init asks about this before writing anything.
 
 4. Run `/honest-docs:init`. It first asks which folder holds the docs about your code; [`references/docs-folder.md`](plugins/honest-docs/references/docs-folder.md) explains the choice and how to move the docs later. It then copies the checks into `.claude/honest-docs/`, adds their hooks to `.claude/settings.json`, writes the docs rule, a starter `.claude/honest-docs.json` and two short passages in `CLAUDE.md` (creating it if there is none; beside an `AGENTS.md` it starts with `@AGENTS.md`, so Claude Code keeps reading that file), adds a Last Updated line to each doc that has none, and lists every file it wrote. It ends by saying how many docs problems the check finds; they do not block, but are worth fixing. The checks keep their working files in `.claude/honest-docs-state/`, which git ignores without an entry in your `.gitignore`.
 
